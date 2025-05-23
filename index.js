@@ -1,4 +1,4 @@
-sconst TelegramBot = require('node-telegram-bot-api');
+const TelegramBot = require('node-telegram-bot-api');
 const http = require('http');
 
 // ✅ Ton token depuis Render (via variables d'environnement)
