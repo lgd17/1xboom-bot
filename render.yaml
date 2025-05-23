@@ -1,0 +1,11 @@
+services:
+  - type: worker
+    name: 1xboom-bot
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node index.js
+    autoDeploy: true
+    envVars:
+      - key: BOT_TOKEN
+        value: 7768152677:AAGjgq9IJ1vD_irML3Sl8Qf50tv6lVyiAm0
