@@ -15,8 +15,8 @@ bot.onText(/\/start/, (msg) => {
     reply_markup: {
       inline_keyboard: [
         [
-          { text: '📄 Qui suis-je ?', callback_data: 'COUPON' },
-          { text: '💼 Mes services', callback_data: 'CODE PROMO' },
+          { text: '📄 COUPON 1XBOOM ?', callback_data: 'INFO' },
+          { text: '💼 CODE PROMO', callback_data: 'SERVICE' },
           { text: '📞 Contact', callback_data: 'HELP' }
         ]
       ]
@@ -26,23 +26,46 @@ bot.onText(/\/start/, (msg) => {
   bot.sendMessage(chatId, "Bienvenue sur mon bot personnel 🤖 ! Choisis une option ci-dessous :", options);
 });
 
-// ✅ Gestion des clics sur les boutons
+// ✅ Gestion des clics sur les boutons + bouton retour au menu
 bot.on('callback_query', (callbackQuery) => {
   const message = callbackQuery.message;
   const data = callbackQuery.data;
 
   let response = '';
+  let options = {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '🔙 Retour au menu', callback_data: 'MENU' }]
+      ]
+    }
+  };
 
   if (data === 'INFO') {
-    response = "Je suis un bot créé pour te montrer mes compétences 💡. Je peux t'informer, t'aider, ou même rigoler avec toi 😄.";
-  } else if (data === 'SERVICES') {
-    response = "Voici ce que je propose :\n- 🤖 Création de bots\n- 🌐 Développement web\n- 🧠 Automatisation\n\nIntéressé ? Envoie-moi un message !";
+    response = "Real vs BARÇA.";
+  } else if (data === 'SERVICE') {
+    response = "Voici les services disponibles :\n- LGDbet\n- 🌐 Développement web\n- 🧠 Automatisation";
   } else if (data === 'HELP') {
-    response = "Tu peux me contacter ici 📬 : @TonPseudoTelegram\nOu tape /start pour revenir au menu.";
+    response = "Tu peux me contacter ici 📬 : @Catkatii\nOu tape /start pour revenir au menu.";
+  } else if (data === 'MENU') {
+    // Réaffiche le menu principal
+    const menuOptions = {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '📄 COUPON 1XBOOM ?', callback_data: 'INFO' },
+            { text: '💼 CODE PROMO', callback_data: 'SERVICE' },
+            { text: '📞 Contact', callback_data: 'HELP' }
+          ]
+        ]
+      }
+    };
+    bot.sendMessage(message.chat.id, "Retour au menu principal 👇", menuOptions);
+    return;
   }
 
-  bot.sendMessage(message.chat.id, response);
+  bot.sendMessage(message.chat.id, response, options);
 });
+
 
 
 // ✅ Ajoute un serveur HTTP pour que Render garde le service actif
