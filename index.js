@@ -1,17 +1,16 @@
-require('dotenv').config();
+require('dotenv').config(); // 👈 Charge le fichier .env
 
 const TelegramBot = require('node-telegram-bot-api');
 const http = require('http');
 const { Pool } = require('pg');
 
-// Variables d'environnement
-const token = process.env.BOT_TOKEN;
+// ✅ Connexion à PostgreSQL
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// Test de connexion PostgreSQL
+// ✅ Test PostgreSQL
 pool.connect()
   .then(client => {
     return client.query('SELECT NOW()')
@@ -20,15 +19,15 @@ pool.connect()
         client.release();
       })
       .catch(err => {
-        console.error('❌ Erreur PostgreSQL:', err);
+        console.error('❌ Erreur PostgreSQL :', err);
         client.release();
       });
   })
   .catch(err => {
-    console.error('❌ Connexion PostgreSQL échouée:', err);
+    console.error('❌ Connexion PostgreSQL échouée :', err);
   });
 
-// Fonction pour enregistrer un utilisateur dans la base
+// ✅ Fonction pour enregistrer un utilisateur
 async function saveUser(user) {
   try {
     const query = `
@@ -43,10 +42,11 @@ async function saveUser(user) {
   }
 }
 
-// Démarrage du bot Telegram en mode polling
+// ✅ Démarrage du bot
+const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
 
-// Commande /start
+// ✅ Commande /start
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
 
@@ -74,7 +74,7 @@ bot.onText(/\/start/, async (msg) => {
   bot.sendMessage(chatId, "Bienvenue sur mon bot personnel 🤖 ! Choisis une option ci-dessous :", options);
 });
 
-// Gestion des boutons
+// ✅ Gestion des boutons
 bot.on('callback_query', (callbackQuery) => {
   const message = callbackQuery.message;
   const data = callbackQuery.data;
@@ -92,7 +92,7 @@ bot.on('callback_query', (callbackQuery) => {
   bot.sendMessage(message.chat.id, response);
 });
 
-// Serveur HTTP pour Render (pour garder le bot actif)
+// ✅ Serveur HTTP pour Render
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
   res.writeHead(200);
@@ -100,4 +100,5 @@ http.createServer((req, res) => {
 }).listen(PORT, () => {
   console.log(`🌐 Serveur HTTP actif sur le port ${PORT}`);
 });
+
 
