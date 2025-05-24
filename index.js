@@ -1,8 +1,45 @@
 const TelegramBot = require('node-telegram-bot-api');
 const http = require('http');
+const { Pool } = require('pg');
 
-// ✅ Ton token depuis Render (via variables d'environnement)
+// ✅ Variables d'environnement
 const token = process.env.BOT_TOKEN;
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+// ✅ Test de connexion PostgreSQL (facultatif mais utile)
+pool.connect()
+  .then(client => {
+    return client.query('SELECT NOW()')
+      .then(res => {
+        console.log('✅ PostgreSQL connecté à :', res.rows[0]);
+        client.release();
+      })
+      .catch(err => {
+        console.error('❌ Erreur PostgreSQL:', err);
+        client.release();
+      });
+  })
+  .catch(err => {
+    console.error('❌ Connexion PostgreSQL échouée:', err);
+  });
+
+// ✅ Fonction pour enregistrer un utilisateur dans PostgreSQL
+async function saveUser(user) {
+  try {
+    const query = `
+      INSERT INTO users (telegram_id, username, first_name, last_name)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (telegram_id) DO NOTHING;
+    `;
+    await pool.query(query, [user.id, user.username, user.first_name, user.last_name]);
+    console.log(`✅ Utilisateur enregistré : ${user.username || user.first_name}`);
+  } catch (err) {
+    console.error('❌ Erreur PostgreSQL :', err);
+  }
+}
 
 // ✅ Démarre ton bot en mode polling
 const bot = new TelegramBot(token, { polling: true });
@@ -53,35 +90,11 @@ bot.on('callback_query', (callbackQuery) => {
   bot.sendMessage(message.chat.id, response);
 });
 
-
-
-// ✅ Ajoute un serveur HTTP pour que Render garde le service actif
+// ✅ Serveur HTTP pour Render
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
   res.writeHead(200);
   res.end("Bot is running on Render (plan gratuit)");
 }).listen(PORT, () => {
-  console.log(`Web server running on port ${PORT}`);
-});
-	
-// ✅ Fonction pour enregistrer un utilisateur dans PostgreSQL
-async function saveUser(user) {
-  try {
-    const query = `
-      INSERT INTO users (telegram_id, username, first_name, last_name)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (telegram_id) DO NOTHING;
-    `;
-    await pool.query(query, [user.id, user.username, user.first_name, user.last_name]);
-    console.log(`✅ Utilisateur enregistré : ${user.username || user.first_name}`);
-  } catch (err) {
-    console.error('❌ Erreur PostgreSQL :', err);
-  }
-}
-
-// ✅ Variables d'environnement
-const token = process.env.BOT_TOKEN;
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  console.log(`🌐 Serveur HTTP actif sur le port ${PORT}`);
 });
