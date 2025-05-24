@@ -80,16 +80,31 @@ bot.on('callback_query', (callbackQuery) => {
   const data = callbackQuery.data;
 
   let response = '';
+  let extraOptions = {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '⬅️ Menu principal', callback_data: 'BACK_TO_MENU' }]
+      ]
+    }
+  };
 
   if (data === 'INFO') {
     response = "Real vs BARÇA.";
   } else if (data === 'SERVICE') {
     response = "Voici ce que je propose :\n- LGDbet\n- 🌐 Développement web\n- 🧠 Automatisation\n\nIntéressé ? Envoie-moi un message !";
   } else if (data === 'HELP') {
-    response = "Tu peux me contacter ici 📬 : @Catkatii\nOu tape /start pour revenir au menu.";
+    response = "Tu peux me contacter ici 📬 : @Catkatii\n\nBesoin d'autre chose ?";
+  } else if (data === 'BACK_TO_MENU') {
+    // Appelle manuellement le menu principal
+    bot.emit('text', {
+      chat: message.chat,
+      text: '/start',
+      from: message.chat
+    });
+    return;
   }
 
-  bot.sendMessage(message.chat.id, response);
+  bot.sendMessage(message.chat.id, response, extraOptions);
 });
 
 // ✅ Serveur HTTP pour Render
