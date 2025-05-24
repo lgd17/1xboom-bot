@@ -46,7 +46,7 @@ async function saveUser(user) {
 const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
 
-// ✅ Commande /start
+// ✅ Commande /start (menu principal)
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
 
@@ -93,18 +93,25 @@ bot.on('callback_query', (callbackQuery) => {
   } else if (data === 'SERVICE') {
     response = "Voici ce que je propose :\n- LGDbet\n- 🌐 Développement web\n- 🧠 Automatisation\n\nIntéressé ? Envoie-moi un message !";
   } else if (data === 'HELP') {
-    response = "Tu peux me contacter ici 📬 : @Catkatii\n\nBesoin d'autre chose ?";
+    response = "Tu peux me contacter ici 📬 : @Catkatii\nOu tape /start pour revenir au menu.";
   } else if (data === 'BACK_TO_MENU') {
-    // Appelle manuellement le menu principal
-    bot.emit('text', {
-      chat: message.chat,
-      text: '/start',
-      from: message.chat
+    bot.sendMessage(message.chat.id, "🔄 Retour au menu principal...", {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '📄 COUPON 1XBOOM ?', callback_data: 'INFO' },
+            { text: '💼 CODE PROMO', callback_data: 'SERVICE' },
+            { text: '📞 Contact', callback_data: 'HELP' }
+          ]
+        ]
+      }
     });
     return;
   }
 
-  bot.sendMessage(message.chat.id, response, extraOptions);
+  if (response) {
+    bot.sendMessage(message.chat.id, response, extraOptions);
+  }
 });
 
 // ✅ Serveur HTTP pour Render
