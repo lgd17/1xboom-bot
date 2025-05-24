@@ -8,8 +8,39 @@ const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
 
 bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, "Salut 👋 ! Ton bot est actif sur Render !");
+  const chatId = msg.chat.id;
+  const options = {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '📄 Infos', callback_data: 'INFO' },
+          { text: '📦 Services', callback_data: 'SERVICES' },
+          { text: '❓ Aide', callback_data: 'HELP' }
+        ]
+      ]
+    }
+  };
+
+  bot.sendMessage(chatId, "Salut 👋 Que veux-tu faire ?", options);
+});	
+
+bot.on('callback_query', (callbackQuery) => {
+  const message = callbackQuery.message;
+  const data = callbackQuery.data;
+
+  let response = '';
+
+  if (data === 'INFO') {
+    response = "Voici des infos sur moi 🤖 !";
+  } else if (data === 'SERVICES') {
+    response = "Je propose des services de test, comme celui-ci 🧪.";
+  } else if (data === 'HELP') {
+    response = "Tape /start pour recommencer, ou pose-moi une question !";
+  }
+
+  bot.sendMessage(message.chat.id, response);
 });
+
 
 // ✅ Ajoute un serveur HTTP pour que Render garde le service actif
 const PORT = process.env.PORT || 3000;
