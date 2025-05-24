@@ -83,7 +83,7 @@ bot.on('callback_query', (callbackQuery) => {
   let extraOptions = {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '⬅️ Menu principal', callback_data: 'BACK_TO_MENU' }]
+        [{ text: '🔙 Retour au menu', callback_data: 'BACK_TO_MENU' }]
       ]
     }
   };
