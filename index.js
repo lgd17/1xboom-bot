@@ -1,16 +1,16 @@
-require('dotenv').config(); // 👈 Charge le fichier .env
+require('dotenv').config();
 
 const TelegramBot = require('node-telegram-bot-api');
 const http = require('http');
 const { Pool } = require('pg');
+const langs = require('./lang'); // 🆕 Fichier de traduction
 
-// ✅ Connexion à PostgreSQL
+// ✅ Connexion PostgreSQL
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// ✅ Test PostgreSQL
 pool.connect()
   .then(client => {
     return client.query('SELECT NOW()')
@@ -27,7 +27,7 @@ pool.connect()
     console.error('❌ Connexion PostgreSQL échouée :', err);
   });
 
-// ✅ Fonction pour enregistrer un utilisateur
+// ✅ Enregistre l’utilisateur
 async function saveUser(user) {
   try {
     const query = `
@@ -42,11 +42,23 @@ async function saveUser(user) {
   }
 }
 
+// ✅ Met à jour la langue
+async function updateUserLang(telegramId, lang) {
+  try {
+    await pool.query(
+      'UPDATE users SET lang = $1 WHERE telegram_id = $2',
+      [lang, telegramId]
+    );
+  } catch (err) {
+    console.error('❌ Erreur mise à jour langue :', err);
+  }
+}
+
 // ✅ Démarrage du bot
 const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
 
-// ✅ Commande /start (menu principal)
+// ✅ Commande /start
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
 
@@ -59,6 +71,10 @@ bot.onText(/\/start/, async (msg) => {
 
   await saveUser(user);
 
+  // 🆕 récupère la langue
+  const res = await pool.query('SELECT lang FROM users WHERE telegram_id = $1', [user.id]);
+  const lang = res.rows[0]?.lang || 'fr';
+
   const options = {
     reply_markup: {
       inline_keyboard: [
@@ -66,18 +82,27 @@ bot.onText(/\/start/, async (msg) => {
           { text: '📄 COUPON 1XBOOM ?', callback_data: 'INFO' },
           { text: '💼 CODE PROMO', callback_data: 'SERVICE' },
           { text: '📞 Contact', callback_data: 'HELP' }
+        ],
+        [
+          { text: '🌍 Langue', callback_data: 'LANG' }
         ]
       ]
     }
   };
 
-  bot.sendMessage(chatId, "Bienvenue sur mon bot personnel 🤖 ! Choisis une option ci-dessous :", options);
+  bot.sendMessage(chatId, langs[lang].welcome, options);
 });
 
 // ✅ Gestion des boutons
-bot.on('callback_query', (callbackQuery) => {
+bot.on('callback_query', async (callbackQuery) => {
   const message = callbackQuery.message;
   const data = callbackQuery.data;
+  const chatId = message.chat.id;
+  const userId = callbackQuery.from.id;
+
+  // 🆕 langue utilisateur
+  const res = await pool.query('SELECT lang FROM users WHERE telegram_id = $1', [userId]);
+  const lang = res.rows[0]?.lang || 'fr';
 
   let response = '';
   let extraOptions = {
@@ -93,24 +118,45 @@ bot.on('callback_query', (callbackQuery) => {
   } else if (data === 'SERVICE') {
     response = "Voici ce que je propose :\n- LGDbet\n- 🌐 Développement web\n- 🧠 Automatisation\n\nIntéressé ? Envoie-moi un message !";
   } else if (data === 'HELP') {
-    response = "Tu peux me contacter ici 📬 : @Catkatii\nOu tape /start pour revenir au menu.";
+    response = langs[lang].contact;
+  } else if (data === 'LANG') {
+    const langOptions = {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '🇫🇷 Français', callback_data: 'SET_LANG_FR' },
+            { text: '🇬🇧 English', callback_data: 'SET_LANG_EN' }
+          ]
+        ]
+      }
+    };
+    return bot.sendMessage(chatId, "Choisis ta langue / Choose your language :", langOptions);
+  } else if (data === 'SET_LANG_FR' || data === 'SET_LANG_EN') {
+    const newLang = data === 'SET_LANG_FR' ? 'fr' : 'en';
+    await updateUserLang(userId, newLang);
+    return bot.sendMessage(chatId, newLang === 'fr'
+      ? "✅ Langue définie sur Français."
+      : "✅ Language set to English.");
   } else if (data === 'BACK_TO_MENU') {
-    bot.sendMessage(message.chat.id, "🔄 Retour au menu principal...", {
+    const options = {
       reply_markup: {
         inline_keyboard: [
           [
             { text: '📄 COUPON 1XBOOM ?', callback_data: 'INFO' },
             { text: '💼 CODE PROMO', callback_data: 'SERVICE' },
             { text: '📞 Contact', callback_data: 'HELP' }
+          ],
+          [
+            { text: '🌍 Langue', callback_data: 'LANG' }
           ]
         ]
       }
-    });
-    return;
+    };
+    return bot.sendMessage(chatId, langs[lang].back, options);
   }
 
   if (response) {
-    bot.sendMessage(message.chat.id, response, extraOptions);
+    bot.sendMessage(chatId, response, extraOptions);
   }
 });
 
@@ -122,5 +168,4 @@ http.createServer((req, res) => {
 }).listen(PORT, () => {
   console.log(`🌐 Serveur HTTP actif sur le port ${PORT}`);
 });
-
 
