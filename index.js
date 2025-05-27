@@ -2,21 +2,19 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const bodyParser = require('body-parser');
 
-const token = 'TON_TOKEN_ICI';
-const channelUsername = '@ton_canal_officiel'; // Ton canal officiel
+const token = 'TON_NOUVEAU_TOKEN_ICI';
+const channelUsername = '@ton_canal_officiel';
 const CODE_PROMO = '1XBOOM';
 
-const bot = new TelegramBot(token, { polling: false }); // Pas de polling
+const bot = new TelegramBot(token, { polling: false });
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-// ✅ Pour garder en mémoire les utilisateurs validés (en mémoire, à remplacer par DB en prod)
 const usersVerified = new Map();
 
-// ✅ Vérifie si l'utilisateur est membre du canal
 async function isUserInChannel(userId) {
   try {
     const res = await bot.getChatMember(channelUsername, userId);
@@ -26,7 +24,6 @@ async function isUserInChannel(userId) {
   }
 }
 
-// Endpoint webhook que Telegram appelle
 app.post(`/bot${token}`, async (req, res) => {
   try {
     await bot.processUpdate(req.body);
@@ -37,7 +34,6 @@ app.post(`/bot${token}`, async (req, res) => {
   }
 });
 
-// ✅ Commande /start
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
@@ -63,15 +59,16 @@ Entre le *code promo* pour accéder aux pronostics 1XBOOM :`, { parse_mode: 'Mar
   sendMainMenu(chatId, msg.from.first_name);
 });
 
-// ✅ Gère les messages texte pour le code promo
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
-  const text = msg.text?.trim();
 
-  if (!text) return;
+  // ✅ Ignore les messages non texte
+  if (!msg.text || typeof msg.text !== 'string') return;
 
-  if (text === '/start') return; // déjà géré ailleurs
+  const text = msg.text.trim();
+
+  if (text === '/start') return;
 
   if (!usersVerified.has(userId)) {
     if (text.toUpperCase() === CODE_PROMO) {
@@ -86,7 +83,6 @@ Essaie encore. Le *code promo* est requis pour accéder à 1XBOOM.`, { parse_mod
   }
 });
 
-// ✅ Envoie le menu principal
 function sendMainMenu(chatId, prenom) {
   const options = {
     reply_markup: {
@@ -111,7 +107,6 @@ function sendMainMenu(chatId, prenom) {
   });
 }
 
-// ✅ Gestion des boutons
 bot.on('callback_query', (callbackQuery) => {
   const msg = callbackQuery.message;
   const data = callbackQuery.data;
@@ -136,7 +131,6 @@ bot.on('callback_query', (callbackQuery) => {
   bot.sendMessage(msg.chat.id, response);
 });
 
-// ✅ Lancement du serveur Express
 app.listen(port, () => {
   console.log(`Serveur webhook lancé sur le port ${port}`);
 });
