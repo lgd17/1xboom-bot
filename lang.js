@@ -1,12 +1,14 @@
-module.exports = {
-  fr: {
-    welcome: "Bienvenue sur mon bot personnel 🤖 ! Choisis une option ci-dessous :",
-    contact: "Tu peux me contacter ici 📬 : @Catkatii\nOu tape /start pour revenir au menu.",
-    back: "🔄 Retour au menu principal..."
-  },
-  en: {
-    welcome: "Welcome to my personal bot 🤖! Choose an option below:",
-    contact: "You can contact me here 📬: @Catkatii\nOr type /start to return to the menu.",
-    back: "🔄 Back to main menu..."
-  }
+const fs = require('fs');
+const path = require('path');
+
+const locales = {
+  fr: JSON.parse(fs.readFileSync(path.join(__dirname, 'locales/fr.json'))),
+  en: JSON.parse(fs.readFileSync(path.join(__dirname, 'locales/en.json')))
 };
+
+function t(lang, key) {
+  return locales[lang]?.[key] || locales.fr[key] || key;
+}
+
+module.exports = { t };
+

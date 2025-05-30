@@ -1,0 +1,14 @@
+{
+  "menu": "Choisis un bouton 👇",
+  "button1": "🔵 Bouton 1",
+  "button2": "🟢 Bouton 2",
+  "button3": "🟠 Bouton 3",
+  "button4": "🔴 Bouton 4",
+  "back": "🔙 Retour au menu",
+  "response1": "Tu as cliqué sur 🔵 Bouton 1",
+  "response2": "Tu as cliqué sur 🟢 Bouton 2",
+  "response3": "Tu as cliqué sur 🟠 Bouton 3",
+  "response4": "Tu as cliqué sur 🔴 Bouton 4",
+  "unknown": "Commande inconnue ❓"
+}
+
