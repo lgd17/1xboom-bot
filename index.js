@@ -631,7 +631,7 @@ bot.onText(/📌 Pronostic du jour/, async (msg) => {
   const userId = msg.from.id;
   const chatId = msg.chat.id;
 
-  const verified = await db.query(
+  const verified = await pool.query(
     `SELECT 1 FROM verified_users WHERE telegram_id = $1`,
     [userId]
   );
@@ -685,7 +685,7 @@ bot.onText(/📌 Pronostic du jour/, async (msg) => {
           }
 
           // ✅ Enregistrement en base
-          await db.query(`
+          await pool.query(`
             INSERT INTO pending_verifications (telegram_id, bookmaker, depot_id, amount)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (telegram_id) DO UPDATE
@@ -1223,7 +1223,7 @@ bot.on('message', async (msg) => {
     }
 
     try {
-      await db.query(
+      await pool.query(
         `INSERT INTO messages_auto (contenu, media_url, send_date) VALUES ($1, $2, $3)`,
         [state.contenu, state.media_url, sendDate.toDate()]
       );
@@ -1251,7 +1251,7 @@ bot.onText(/\/listmsg/, async (msg) => {
   }
 
   try {
-    const { rows } = await db.query(
+    const { rows } = await pool.query(
       `SELECT id, contenu, send_date, media_url FROM messages_auto
        WHERE send_date::date = CURRENT_DATE
        ORDER BY send_date ASC`
@@ -1288,7 +1288,7 @@ bot.onText(/\/delmsg (\d+)/, async (msg, match) => {
   }
 
   // Vérifie si l'ID existe
-  const { rows } = await db.query('SELECT * FROM messages_auto WHERE id = $1', [messageId]);
+  const { rows } = await pool.query('SELECT * FROM messages_auto WHERE id = $1', [messageId]);
   if (rows.length === 0) {
     return bot.sendMessage(msg.chat.id, `❌ Aucun message trouvé avec l’ID ${messageId}.`);
   }
@@ -1322,7 +1322,7 @@ bot.on('callback_query', async (query) => {
 
   if (action === 'confirm_delete') {
     try {
-      await db.query('DELETE FROM messages_auto WHERE id = $1', [messageId]);
+      await pool.query('DELETE FROM messages_auto WHERE id = $1', [messageId]);
       pendingDeletions.delete(userId);
 
       await bot.editMessageText(`✅ Message ID ${messageId} supprimé avec succès.`, {
@@ -1368,7 +1368,7 @@ bot.onText(/\/addfixedmsg/, (msg) => {
   if (userId.toString() !== adminId) return bot.sendMessage(chatId, "⛔ Tu n'as pas l'autorisation.");
 
   try {
-    const { rows } = await db.query('SELECT * FROM message_fixes WHERE id = $1', [id]);
+    const { rows } = await pool.query('SELECT * FROM message_fixes WHERE id = $1', [id]);
     if (rows.length === 0) return bot.sendMessage(chatId, "❌ Message introuvable.");
 
     fixedEditStates[userId] = { id, step: 1 };
@@ -1474,7 +1474,7 @@ bot.on('callback_query', async (query) => {
 
   if (data === 'confirm_edit' && editState) {
     try {
-      await db.query('UPDATE message_fixes SET media_text=$1, media_url=$2, heures=$3 WHERE id=$4', [
+      await pool.query('UPDATE message_fixes SET media_text=$1, media_url=$2, heures=$3 WHERE id=$4', [
         editState.media_text, editState.media_url, editState.heures, editState.id
       ]);
       await bot.sendMessage(chatId, "✅ Message modifié !");
@@ -1492,7 +1492,7 @@ bot.on('callback_query', async (query) => {
 
   if (data === 'confirm_add' && addState) {
     try {
-      await db.query('INSERT INTO message_fixes (media_text, media_url, heures) VALUES ($1, $2, $3)', [
+      await pool.query('INSERT INTO message_fixes (media_text, media_url, heures) VALUES ($1, $2, $3)', [
         addState.media_text, addState.media_url, addState.heures
       ]);
       await bot.sendMessage(chatId, "✅ Message ajouté !");
@@ -1512,7 +1512,7 @@ bot.on('callback_query', async (query) => {
   if (data.startsWith('testfixed_')) {
     const id = data.split('_')[1];
     try {
-      const { rows } = await db.query('SELECT * FROM message_fixes WHERE id = $1', [id]);
+      const { rows } = await pool.query('SELECT * FROM message_fixes WHERE id = $1', [id]);
       const row = rows[0];
       if (!row) return bot.sendMessage(chatId, "❌ Message introuvable.");
 
@@ -1542,7 +1542,7 @@ bot.on('callback_query', async (query) => {
   if (data.startsWith('publishfixed_')) {
     const id = data.split('_')[1];
     try {
-      const { rows } = await db.query('SELECT * FROM message_fixes WHERE id = $1', [id]);
+      const { rows } = await pool.query('SELECT * FROM message_fixes WHERE id = $1', [id]);
       const row = rows[0];
       if (!row) return bot.sendMessage(chatId, "❌ Message introuvable.");
 
@@ -1573,7 +1573,7 @@ bot.on('callback_query', async (query) => {
     if (userId.toString() !== adminId) return bot.answerCallbackQuery(query.id, { text: "Pas autorisé" });
     const id = data.split('_')[1];
     try {
-      await db.query('DELETE FROM message_fixes WHERE id=$1', [id]);
+      await pool.query('DELETE FROM message_fixes WHERE id=$1', [id]);
       await bot.sendMessage(chatId, `✅ Message ${id} supprimé.`);
     } catch (err) {
       console.error(err);
@@ -1595,7 +1595,7 @@ bot.onText(/\/fixedmenu/, async (msg) => {
   if (msg.from.id.toString() !== adminId) return;
 
   try {
-    const { rows } = await db.query('SELECT * FROM message_fixes ORDER BY id');
+    const { rows } = await pool.query('SELECT * FROM message_fixes ORDER BY id');
     if (rows.length === 0) {
       return bot.sendMessage(msg.chat.id, "📭 Aucun message fixe trouvé.");
     }
@@ -1628,13 +1628,13 @@ bot.on('callback_query', async (query) => {
   try {
     if (data.startsWith('deletefixed_')) {
       const id = data.split('_')[1];
-      await db.query('DELETE FROM message_fixes WHERE id=$1', [id]);
+      await pool.query('DELETE FROM message_fixes WHERE id=$1', [id]);
       await bot.sendMessage(chatId, `🗑 Message ID ${id} supprimé.`);
     }
 
     else if (data.startsWith('testfixed_')) {
       const id = data.split('_')[1];
-      const { rows } = await db.query('SELECT * FROM message_fixes WHERE id=$1', [id]);
+      const { rows } = await pool.query('SELECT * FROM message_fixes WHERE id=$1', [id]);
       const row = rows[0];
 
       if (!row) {
@@ -1685,7 +1685,7 @@ bot.on('message', async (msg) => {
 
     if (state.step === 'awaiting_hours') {
       state.heures = msg.text;
-      await db.query('UPDATE message_fixes SET media_text=$1, heures=$2 WHERE id=$3', [
+      await pool.query('UPDATE message_fixes SET media_text=$1, heures=$2 WHERE id=$3', [
         state.text, state.heures, state.id
       ]);
       delete editStates[userId];
@@ -1697,7 +1697,7 @@ bot.on('message', async (msg) => {
 // === Envoi automatique toutes les minutes ===
 async function sendFixedMessages() {
   try {
-    const { rows } = await db.query('SELECT * FROM message_fixes');
+    const { rows } = await pool.query('SELECT * FROM message_fixes');
     const now = new Date();
     const heureStr = now.toTimeString().slice(0, 5); // "HH:MM"
 
