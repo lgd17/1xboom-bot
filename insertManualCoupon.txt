@@ -1,0 +1,21 @@
+async function insertManualCoupon(chatId, content, mediaUrl, mediaType, date) {
+  try {
+    await pool.query(`
+      INSERT INTO daily_pronos (content, media_url, media_type, date)
+      VALUES ($1, $2, $3, $4)
+    `, [content, mediaUrl, mediaType, date]);
+
+    if (mediaType === 'photo') {
+      await bot.sendPhoto(chatId, mediaUrl, { caption: content });
+    } else if (mediaType === 'video') {
+      await bot.sendVideo(chatId, mediaUrl, { caption: content });
+    } else {
+      await bot.sendMessage(chatId, content);
+    }
+
+    await bot.sendMessage(chatId, `✅ Coupon ajouté pour le ${date}`);
+  } catch (err) {
+    console.error("❌ Erreur lors de l'ajout manuel :", err);
+    bot.sendMessage(chatId, "❌ Erreur lors de l’ajout du coupon.");
+  }
+}
