@@ -22,14 +22,7 @@ const channelId = process.env.TELEGRAM_CHANNEL_ID;
 const baseUrl = process.env.BASE_URL; // exemple : https://1xboom.onrender.com
 
 // ====== BASE DE DONNÉES ======
-const pool = new Pool({
-  connectionString: 'postgres://postgres:kbirouB1%40lgd@db.rmchytildauyjgmmkpxq.supabase.co:5432/postgres',
-  ssl: { rejectUnauthorized: false },
-});
 
-if (!token) {
-  throw new Error('❌ TELEGRAM_BOT_TOKEN non défini. Vérifie ton fichier .env');
-}
 
 // ====== BOUTON / SUIVI ÉTATS UTILISATEURS ======
 const userStates = {};
