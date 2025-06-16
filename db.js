@@ -2,12 +2,15 @@ require('dotenv').config(); // Charge les variables .env
 const { Pool } = require('pg');
 
 // ✅ Création du pool PostgreSQL
+require('dotenv').config();
+const { Pool } = require('pg');
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false // ✅ nécessaire pour Supabase sur Render
-  }
+  ssl: { rejectUnauthorized: false }
 });
+
+module.exports = pool;
 
 // ✅ Gestion des erreurs côté base
 pool.on('error', (err) => {
