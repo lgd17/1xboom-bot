@@ -1,37 +1,23 @@
-
-require('dotenv').config(); // ✅ charge les variables depuis .env
+require('dotenv').config();
 const { Pool } = require('pg');
+const dns = require('dns').promises;
 
-// ✅ Connexion PostgreSQL via .env
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false // ✅ important pour Supabase
-  }
-});
+async function createPool() {
+  const dbUrl = new URL(process.env.DATABASE_URL);
+  const host = dbUrl.hostname;
 
-// ✅ Gestion des erreurs côté base
-pool.on('error', (err) => {
-  console.error('❌ Erreur inattendue côté PostgreSQL :', err);
-  process.exit(-1);
-});
+  const ipv4Addresses = await dns.resolve4(host); // 👈 force IPv4
 
-async function insertManualCoupon(content, mediaUrl, mediaType, date) {
-  const query = `
-    INSERT INTO daily_pronos (content, media_url, media_type, date)
-    VALUES ($1, $2, $3, $4)
-  `;
-  const values = [content, mediaUrl, mediaType, date];
+  const ipv4Url = process.env.DATABASE_URL.replace(host, ipv4Addresses[0]);
 
-  try {
-    await pool.query(query, values);
-    console.log("✅ Prono inséré avec succès.");
-  } catch (err) {
-    console.error("❌ Erreur lors de l'insertion :", err);
-  }
+  return new Pool({
+    connectionString: ipv4Url,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
 }
 
 module.exports = {
-  pool,
-  insertManualCoupon
+  pool: await createPool()
 };

@@ -33,6 +33,9 @@ const userLang = {};
 const fixedAddStates = {};
 const fixedEditStates = {};
 const editStates = {};
+// CommonJS syntax
+const fetch = require('node-fetch');
+
 
 // ====== BOT EN MODE WEBHOOK ======
 const bot = new TelegramBot(token, { webHook: true });
@@ -1799,3 +1802,11 @@ function startAutoSender() {
 
 // ✅ On appelle la fonction APRÈS sa déclaration
 startAutoSender();
+
+
+
+(async () => {
+  const res = await fetch('https://api64.ipify.org?format=json');
+  const json = await res.json();
+  console.log(json.ip);
+})();
