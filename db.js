@@ -1,36 +1,23 @@
-require('dotenv').config(); // Charger les variables .env
+require('dotenv').config();
 const { Pool } = require('pg');
+const dns = require('dns').promises;
 
-// ✅ Création du pool PostgreSQL
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+async function createPool() {
+  const dbUrl = new URL(process.env.DATABASE_URL);
+  const host = dbUrl.hostname;
 
-// ✅ Gestion des erreurs côté base
-pool.on('error', (err) => {
-  console.error('❌ Erreur inattendue côté PostgreSQL :', err);
-  process.exit(-1);
-});
+  const ipv4Addresses = await dns.resolve4(host); // 👈 force IPv4
 
-// ✅ Fonction : insérer un prono manuel dans la table daily_pronos
-async function insertManualCoupon(content, mediaUrl, mediaType, date, type = 'gratuit') {
-  const query = `
-    INSERT INTO daily_pronos (content, media_url, media_type, date, type)
-    VALUES ($1, $2, $3, $4, $5)
-  `;
-  const values = [content, mediaUrl, mediaType, date, type];
+  const ipv4Url = process.env.DATABASE_URL.replace(host, ipv4Addresses[0]);
 
-  try {
-    await pool.query(query, values);
-    console.log("✅ Prono inséré avec succès.");
-  } catch (err) {
-    console.error("❌ Erreur lors de l'insertion :", err);
-  }
+  return new Pool({
+    connectionString: ipv4Url,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
 }
 
-// ✅ Export unique
 module.exports = {
-  pool,
-  insertManualCoupon
+  pool: await createPool()
 };

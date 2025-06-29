@@ -21,6 +21,12 @@ const channelId = process.env.TELEGRAM_CHANNEL_ID;
 const baseUrl = process.env.BASE_URL; // exemple : https://1xboom.onrender.com
 
 // ====== BASE DE DONNÉES ======
+const { initDb } = require('./db');
+
+(async () => {
+  await initDb();
+  // le reste de ton bot ici
+})();
 
 
 // ====== BOUTON / SUIVI ÉTATS UTILISATEURS ======
@@ -32,6 +38,7 @@ const userLang = {};
 const fixedAddStates = {};
 const fixedEditStates = {};
 const editStates = {};
+
 // CommonJS syntax
 const fetch = require('node-fetch');
 
@@ -1719,12 +1726,92 @@ bot.on('message', async (msg) => {
 
 
 
+// === Envoi automatique toutes les minutes ===
+More actions
+
+async function sendFixedMessages() {
+
+  try {
+
+    const { rows } = await pool.query('SELECT * FROM message_fixes');
+
+    const now = new Date();
+
+    const heureStr = now.toTimeString().slice(0, 5); // "HH:MM"
+
+
+
+    for (const row of rows) {
+
+      if (!row.heures) continue;
+
+      const heures = row.heures.split(',').map(h => h.trim());
+
+      if (heures.includes(heureStr)) {
+
+        try {
+
+          if (row.media_url?.startsWith('http')) {
+
+            await bot.sendMessage(channelId, row.media_text);
+
+          } else if (row.media_url?.includes('AgAC') || row.media_url?.includes('photo')) {
+
+            await bot.sendPhoto(channelId, row.media_url, { caption: row.media_text });
+
+          } else if (row.media_url?.includes('BAAD') || row.media_url?.includes('video')) {
+
+            await bot.sendVideo(channelId, row.media_url, { caption: row.media_text });
+
+          } else if (row.media_url?.includes('AwAD') || row.media_url?.includes('voice')) {
+
+            await bot.sendVoice(channelId, row.media_url);
+
+            await bot.sendMessage(channelId, row.media_text);
+
+          } else {
+
+            await bot.sendMessage(channelId, row.media_text);
+
+          }
+
+        } catch (err) {
+
+          console.error('Erreur envoi automatique:', err);
+
+        }
+
+      }
+
+    }
+
+  } catch (err) {
+
+    console.error('Erreur récupération messages fixes:', err);
+
+  }
+
+}
+
+
+
+schedule.scheduleJob('* * * * *', sendFixedMessages);
+
+
+
+
 
 // ====== AUTRES COMMANDES/LOGIQUE ICI =======
+
 // Par exemple /start etc.
 
+
+
 bot.onText(/\/start/, (msg) => {
+
   bot.sendMessage(msg.chat.id, "🤖 Bot démarré et prêt.");
+
+});
 });
 
 
@@ -1901,3 +1988,21 @@ app.post('/postback', async (req, res) => {
 bot.onText(/\/test/, (msg) => {
   bot.sendMessage(msg.chat.id, "Bot et serveur ✅ fonctionnels");
 });
+
+
+
+(async () => {
+
+
+
+
+  const res = await fetch('https://api64.ipify.org?format=json');
+
+
+  const json = await res.json();
+
+
+  console.log(json.ip);
+
+
+})();
