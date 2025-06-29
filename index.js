@@ -1727,7 +1727,6 @@ bot.on('message', async (msg) => {
 
 
 // === Envoi automatique toutes les minutes ===
-More actions
 
 async function sendFixedMessages() {
 
@@ -1811,7 +1810,6 @@ bot.onText(/\/start/, (msg) => {
 
   bot.sendMessage(msg.chat.id, "🤖 Bot démarré et prêt.");
 
-});
 });
 
 
