@@ -1720,7 +1720,12 @@ bot.on('message', async (msg) => {
 
 
 
+// ====== AUTRES COMMANDES/LOGIQUE ICI =======
+// Par exemple /start etc.
 
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(msg.chat.id, "🤖 Bot démarré et prêt.");
+});
 
 
 
