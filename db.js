@@ -14,12 +14,12 @@ pool.on('error', (err) => {
 });
 
 // ✅ Fonction : insérer un prono manuel dans la table daily_pronos
-async function insertManualCoupon(content, mediaUrl, mediaType, date) {
+async function insertManualCoupon(content, mediaUrl, mediaType, date, type = 'gratuit') {
   const query = `
-    INSERT INTO daily_pronos (content, media_url, media_type, date)
-    VALUES ($1, $2, $3, $4)
+    INSERT INTO daily_pronos (content, media_url, media_type, date, type)
+    VALUES ($1, $2, $3, $4, $5)
   `;
-  const values = [content, mediaUrl, mediaType, date];
+  const values = [content, mediaUrl, mediaType, date, type];
 
   try {
     await pool.query(query, values);

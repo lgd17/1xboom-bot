@@ -1016,14 +1016,6 @@ bot.on('callback_query', async (query) => {
   await bot.answerCallbackQuery(query.id);
 });
 
-// Fonction d’enregistrement SQL
-async function insertManualCoupon(content, media_url, media_type, date, type = 'gratuit') {
-  await pool.query(`
-    INSERT INTO daily_pronos (content, media_url, media_type, date, type)
-    VALUES ($1, $2, $3, $4, $5)
-  `, [content, media_url, media_type, date, type]);
-}
-
 // Récapitulatif final complet
 async function sendFinalRecap(chatId, state) {
   let recap = `📝 *Récapitulatif final :*\n\n📅 Date : *${state.date}*\n✍️ Contenu :\n${state.content}\n\n🔖 Type : *${state.type}*`;
