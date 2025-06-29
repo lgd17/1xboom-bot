@@ -7,7 +7,7 @@ const cron = require('node-cron');
 const schedule = require('node-schedule');
 const { generateCoupon } = require('./coupon-api');
 const { pool, insertManualCoupon } = require('./db');
-const setupAutoSender = require('./autosender');
+const { sendFixedMessages } = require('./autosender');
 
 // ====== SERVEUR EXPRESS POUR TELEGRAM ======
 const app = express();
@@ -43,8 +43,10 @@ bot.setWebHook(`${baseUrl}/bot${token}`)
   .then(() => console.log(`✅ Webhook Telegram configuré : ${baseUrl}/bot${token}`))
   .catch(err => console.error('❌ Erreur Webhook :', err));
 
-// ====== ENVOI AUTO DES MESSAGES FIXES ======
-
+// ====== ENVOI AUTOMATIQUE DES MESSAGES FIXES CHAQUE MINUTE ======
+schedule.scheduleJob('* * * * *', async () => {
+  await sendFixedMessages(bot, channelId);
+});
 
 
 // Réception des messages Telegram via Webhook
@@ -55,6 +57,14 @@ app.post(`/bot${token}`, (req, res) => {
 
 // Page test pour Render
 app.get('/', (req, res) => res.send('✅ Bot is alive (webhook mode)'));
+
+
+// Route de ping pour réveiller Render
+app.get('/ping', (req, res) => {
+  console.log('✅ Ping reçu de cron-job.org — Bot réveillé');
+  res.status(200).send('Bot is awake!');
+});
+
 
 // Lancement serveur
 app.listen(port, () => {
@@ -294,7 +304,8 @@ bot.on('callback_query', async (callbackQuery) => {
   }
 });
 
-                                        /// BOUTON "🎯 Pronostics du jour"\\\
+//////////////////////////////////////////////////////////////// BOUTON "🎯 Pronostics du jour"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
 
 bot.onText(/🎯 Pronostics du jour/, async (msg) => {
   const chatId = msg.chat.id;
@@ -904,116 +915,136 @@ let pendingCoupon = {};
 
 
 
+const pendingCoupon = {};
+
 bot.onText(/\/ajouter_prono/, (msg) => {
   const chatId = msg.chat.id;
   if (chatId !== ADMIN_ID) return bot.sendMessage(chatId, "🚫 Commande réservée à l’admin.");
 
   pendingCoupon[chatId] = { step: 'awaiting_date' };
-  bot.sendMessage(chatId, "📅 Pour quelle date est ce prono ?\nEx: 2025-06-06 ou tape /today");
+  bot.sendMessage(chatId, "📅 Pour quelle date est ce prono ?\nEx: 2025-06-27 ou tape /today");
 });
 
-// Commande /today
 bot.onText(/\/today/, (msg) => {
   const chatId = msg.chat.id;
-  if (!pendingCoupon[chatId] || pendingCoupon[chatId].step !== 'awaiting_date') return;
-
-  const today = new Date().toISOString().slice(0, 10);
-  pendingCoupon[chatId].date = today;
+  if (pendingCoupon[chatId]?.step !== 'awaiting_date') return;
+  pendingCoupon[chatId].date = new Date().toISOString().slice(0, 10);
   pendingCoupon[chatId].step = 'awaiting_content';
-  bot.sendMessage(chatId, "📝 Envoie maintenant le texte du prono.");
+  bot.sendMessage(chatId, "📝 Envoie maintenant le *texte* du prono.", { parse_mode: "Markdown" });
 });
 
-// Commande /skip pour ignorer l'ajout de média
 bot.onText(/\/skip/, async (msg) => {
   const chatId = msg.chat.id;
   const state = pendingCoupon[chatId];
   if (!state || state.step !== 'awaiting_media') return;
 
-  await insertManualCoupon(state.content, null, null, state.date);
-  delete pendingCoupon[chatId];
-  bot.sendMessage(chatId, "✅ Prono sans média enregistré.");
+  state.media_url = null;
+  state.media_type = null;
+  state.step = 'awaiting_final_confirm';
+  return sendFinalRecap(chatId, state);
 });
 
-// Gestion des messages (date, contenu, média)
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const state = pendingCoupon[chatId];
   if (!state || msg.text?.startsWith("/")) return;
 
-  // Étape : date manuelle
-  if (state.step === 'awaiting_date' && /^\d{4}-\d{2}-\d{2}$/.test(msg.text)) {
-    const inputDate = new Date(msg.text);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (inputDate < today) {
-      return bot.sendMessage(chatId, "❌ La date ne peut pas être dans le passé. Réessaie.");
-    }
-
+  if (state.step === 'awaiting_date') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(msg.text)) return bot.sendMessage(chatId, "❌ Date invalide. Format attendu : YYYY-MM-DD.");
+    const date = new Date(msg.text);
+    if (date < new Date().setHours(0, 0, 0, 0)) return bot.sendMessage(chatId, "❌ La date ne peut pas être dans le passé.");
     state.date = msg.text;
     state.step = 'awaiting_content';
-    return bot.sendMessage(chatId, "📝 Envoie maintenant le texte du prono.");
+    return bot.sendMessage(chatId, "📝 Envoie maintenant le *texte* du prono.", { parse_mode: "Markdown" });
   }
 
-  // Étape : contenu
-  if (state.step === 'awaiting_content' && msg.text) {
+  if (state.step === 'awaiting_content') {
     state.content = msg.text;
-    state.step = 'awaiting_confirmation';
-
-    const recap = `📝 *Récapitulatif du prono:*\n📅 Date: *${state.date}*\n✍️ Contenu: *${state.content}*\n\nSouhaites-tu continuer ?`;
-    return bot.sendMessage(chatId, recap, {
-      parse_mode: 'Markdown',
+    state.step = 'awaiting_type';
+    return bot.sendMessage(chatId, "🔔 Choisis le *type* de prono :", {
+      parse_mode: "Markdown",
       reply_markup: {
         inline_keyboard: [
-          [{ text: "✅ Confirmer", callback_data: "confirm_prono" }],
-          [{ text: "❌ Annuler", callback_data: "cancel_prono" }]
+          [{ text: "Gratuit", callback_data: "type_gratuit" }, { text: "Premium", callback_data: "type_premium" }]
         ]
       }
     });
   }
 
-  // Étape : ajout du média
   if (state.step === 'awaiting_media') {
     if (msg.photo) {
       const fileId = msg.photo.at(-1).file_id;
       const fileUrl = await bot.getFileLink(fileId);
-      await insertManualCoupon(state.content, fileUrl, 'photo', state.date);
-      delete pendingCoupon[chatId];
-      return bot.sendMessage(chatId, "✅ Prono avec photo enregistré.");
-    }
-
-    if (msg.video) {
+      state.media_url = fileUrl;
+      state.media_type = 'photo';
+    } else if (msg.video) {
       const fileId = msg.video.file_id;
       const fileUrl = await bot.getFileLink(fileId);
-      await insertManualCoupon(state.content, fileUrl, 'video', state.date);
-      delete pendingCoupon[chatId];
-      return bot.sendMessage(chatId, "✅ Prono avec vidéo enregistré.");
+      state.media_url = fileUrl;
+      state.media_type = 'video';
+    } else {
+      return bot.sendMessage(chatId, "❌ Envoie une *photo*, une *vidéo* ou tape /skip.", { parse_mode: "Markdown" });
     }
 
-    return bot.sendMessage(chatId, "❌ Envoie une *photo*, une *vidéo* ou tape /skip.", { parse_mode: "Markdown" });
+    state.step = 'awaiting_final_confirm';
+    return sendFinalRecap(chatId, state);
   }
 });
 
-// Callback pour confirmer ou annuler
+// Boutons (type + validation finale)
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
+  const data = query.data;
   const state = pendingCoupon[chatId];
   if (!state) return bot.answerCallbackQuery(query.id);
 
-  if (query.data === 'confirm_prono') {
+  if (data === 'type_gratuit' || data === 'type_premium') {
+    state.type = data.replace('type_', '');
     state.step = 'awaiting_media';
-    await bot.sendMessage(chatId, "📎 Tu peux maintenant envoyer une *photo* ou une *vidéo* pour ce prono.\nSinon tape /skip.", {
-      parse_mode: "Markdown"
-    });
+    await bot.sendMessage(chatId, "📎 Tu peux maintenant envoyer une *photo*, une *vidéo* ou tape /skip.", { parse_mode: "Markdown" });
   }
 
-  if (query.data === 'cancel_prono') {
+  if (data === 'confirm_save') {
+    await insertManualCoupon(state.content, state.media_url, state.media_type, state.date, state.type);
+    await bot.sendMessage(chatId, "✅ Prono enregistré avec succès !");
+    delete pendingCoupon[chatId];
+  }
+
+  if (data === 'cancel_save') {
     delete pendingCoupon[chatId];
     await bot.sendMessage(chatId, "❌ Ajout du prono annulé.");
   }
 
   await bot.answerCallbackQuery(query.id);
 });
+
+// Fonction d’enregistrement SQL
+async function insertManualCoupon(content, media_url, media_type, date, type = 'gratuit') {
+  await pool.query(`
+    INSERT INTO daily_pronos (content, media_url, media_type, date, type)
+    VALUES ($1, $2, $3, $4, $5)
+  `, [content, media_url, media_type, date, type]);
+}
+
+// Récapitulatif final complet
+async function sendFinalRecap(chatId, state) {
+  let recap = `📝 *Récapitulatif final :*\n\n📅 Date : *${state.date}*\n✍️ Contenu :\n${state.content}\n\n🔖 Type : *${state.type}*`;
+  if (state.media_type && state.media_url) {
+    recap += `\n📎 Média : *${state.media_type}*`;
+  } else {
+    recap += `\n📎 Média : *Aucun*`;
+  }
+
+  await bot.sendMessage(chatId, recap, {
+    parse_mode: 'Markdown',
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "✅ Enregistrer", callback_data: "confirm_save" }],
+        [{ text: "❌ Annuler", callback_data: "cancel_save" }]
+      ]
+    }
+  });
+}
 
 
 
@@ -1697,40 +1728,51 @@ bot.on('message', async (msg) => {
 });
 
 // === Envoi automatique toutes les minutes ===
+// Fonction principale : vérifie toutes les minutes les messages à envoyer
 async function sendFixedMessages() {
   try {
     const { rows } = await pool.query('SELECT * FROM message_fixes');
     const now = new Date();
     const heureStr = now.toTimeString().slice(0, 5); // "HH:MM"
+    console.log(`[${heureStr}] Vérification des messages fixes...`);
 
     for (const row of rows) {
       if (!row.heures) continue;
       const heures = row.heures.split(',').map(h => h.trim());
+
       if (heures.includes(heureStr)) {
         try {
-          if (row.media_url?.startsWith('http')) {
-            await bot.sendMessage(channelId, row.media_text);
-          } else if (row.media_url?.includes('AgAC') || row.media_url?.includes('photo')) {
-            await bot.sendPhoto(channelId, row.media_url, { caption: row.media_text });
-          } else if (row.media_url?.includes('BAAD') || row.media_url?.includes('video')) {
-            await bot.sendVideo(channelId, row.media_url, { caption: row.media_text });
-          } else if (row.media_url?.includes('AwAD') || row.media_url?.includes('voice')) {
-            await bot.sendVoice(channelId, row.media_url);
-            await bot.sendMessage(channelId, row.media_text);
+          const text = row.media_text;
+          const media = row.media_url;
+
+          if (media?.startsWith('http')) {
+            await bot.sendMessage(channelId, text);
+          } else if (media?.includes('AgAC') || media?.includes('photo')) {
+            await bot.sendPhoto(channelId, media, { caption: text });
+          } else if (media?.includes('BAAD') || media?.includes('video')) {
+            await bot.sendVideo(channelId, media, { caption: text });
+          } else if (media?.includes('AwAD') || media?.includes('voice')) {
+            await bot.sendVoice(channelId, media);
+            await bot.sendMessage(channelId, text);
           } else {
-            await bot.sendMessage(channelId, row.media_text);
+            await bot.sendMessage(channelId, text);
           }
+
+          console.log(`✅ Message envoyé à ${heureStr} [ID ${row.id}]`);
         } catch (err) {
-          console.error('Erreur envoi automatique:', err);
+          console.error('❌ Erreur envoi message :', err);
         }
       }
     }
   } catch (err) {
-    console.error('Erreur récupération messages fixes:', err);
+    console.error('❌ Erreur requête message_fixes :', err);
   }
 }
 
+// Planifie l'envoi toutes les minutes
 schedule.scheduleJob('* * * * *', sendFixedMessages);
+
+module.exports = { sendFixedMessages };
 
 
 // ====== AUTRES COMMANDES/LOGIQUE ICI =======
@@ -1743,69 +1785,176 @@ bot.onText(/\/start/, (msg) => {
 
 
 
-/////////////////////////////////////// ✅ ANDPOINT QUE CRON-JOB.org va appeler ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-                                         //=== COMMANDE /send-fixed-messages ===
 
+//////////////////////////////////////// Taux de change (exemple)\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+const rates = {
+  FCFA: 1, XOF: 1, CFA: 1,
+  USD: 600, EUR: 650, NGN: 1.4, GHS: 50,
+  GBP: 750, ZAR: 30, CAD: 450, INR: 8
+};
 
-function startAutoSender() {
-  const schedule = require('node-schedule');
-
-  // Tu peux ajouter ici des tâches planifiées si besoin avec node-schedule
-  // Par exemple :
-  // schedule.scheduleJob('*/1 * * * *', () => {
-  //   console.log('Tâche planifiée exécutée chaque minute');
-  // });
-
-  // Endpoint que cron-job.org va appeler
-  app.get('/send-fixed-messages', async (req, res) => {
-    try {
-      const now = new Date();
-      const heuresActuelles = now.toLocaleTimeString('fr-FR', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      });
-
-      const { rows } = await pool.query(`
-        SELECT * FROM message_fixes
-        WHERE heures LIKE $1
-      `, [`%${heuresActuelles}%`]);
-
-      for (const msg of rows) {
-        if (msg.media_url) {
-          if (msg.media_url.endsWith('.jpg') || msg.media_url.endsWith('.png')) {
-            await bot.sendPhoto(process.env.CHANNEL_ID, msg.media_url, {
-              caption: msg.media_text,
-              parse_mode: 'HTML'
-            });
-          } else if (msg.media_url.endsWith('.mp4')) {
-            await bot.sendVideo(process.env.CHANNEL_ID, msg.media_url, {
-              caption: msg.media_text,
-              parse_mode: 'HTML'
-            });
-          }
-        } else {
-          await bot.sendMessage(process.env.CHANNEL_ID, msg.media_text, {
-            parse_mode: 'HTML'
-          });
-        }
-      }
-
-      res.status(200).send('✅ Messages envoyés avec succès.');
-    } catch (err) {
-      console.error("Erreur /send-fixed-messages :", err);
-      res.status(500).send("❌ Erreur lors de l’envoi des messages.");
-    }
-  });
+function convertToFcfa(amount, currency) {
+  const rate = rates[currency.toUpperCase()];
+  return rate ? amount * rate : 0;
 }
 
-// ✅ On appelle la fonction APRÈS sa déclaration
-startAutoSender();
+// Liens Android APK + iOS App Store par bookmaker et langue
+const appLinks = {
+  '1xbet': {
+    android: {
+      fr: 'https://affpa.top/L?tag=d_3020095m_70865c_&site=3020095&ad=70865/fr.apk',
+      en: 'https://affpa.top/L?tag=d_3020095m_70865c_&site=3020095&ad=70865/en.apk',
+      ar: 'https://affpa.top/L?tag=d_3020095m_70865c_&site=3020095&ad=70865/ar.apk',
+      pt: 'https://affpa.top/L?tag=d_3020095m_70865c_&site=3020095&ad=70865/pt.apk',
+    },
+    ios: {
+      fr: 'https://affpa.top/L?tag=d_3020095m_27409c_&site=3020095&ad=27409/fr/app/1xbet/id1234567890',
+      en: 'https://affpa.top/L?tag=d_3020095m_27409c_&site=3020095&ad=27409/us/app/1xbet/id1234567890',
+      ar: 'https://affpa.top/L?tag=d_3020095m_27409c_&site=3020095&ad=27409/ae/app/1xbet/id1234567890',
+      pt: 'https://affpa.top/L?tag=d_3020095m_27409c_&site=3020095&ad=27409/br/app/1xbet/id1234567890',
+    }
+  },
+  'melbet': {
+    android: {
+      fr: 'https://https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/fr.apk',
+      en: 'https://https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/en.apk',
+      ar: 'https://https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/ar.apk',
+      pt: 'https://https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/pt.apk',
+    },
+    ios: {
+      fr: 'https://refpakrtsb.top/L?tag=d_3207713m_118464c_&site=3207713&ad=118464/fr/app/melbet/id9876543210',
+      en: 'https://refpakrtsb.top/L?tag=d_3207713m_118464c_&site=3207713&ad=118464/us/app/melbet/id9876543210',
+      ar: 'https://refpakrtsb.top/L?tag=d_3207713m_118464c_&site=3207713&ad=118464/ae/app/melbet/id9876543210',
+      pt: 'https://refpakrtsb.top/L?tag=d_3207713m_118464c_&site=3207713&ad=118464/br/app/melbet/id9876543210',
+    }
+  },
+  'linebet': {
+    android: {
+      fr: 'https://lb-aff.com/L?tag=d_3360482m_66803c_apk1&site=3360482&ad=66803/fr.apk',
+      en: 'https://lb-aff.com/L?tag=d_3360482m_66803c_apk1&site=3360482&ad=66803/en.apk',
+      ar: 'https://lb-aff.com/L?tag=d_3360482m_66803c_apk1&site=3360482&ad=66803/ar.apk',
+      pt: 'https://lb-aff.com/L?tag=d_3360482m_66803c_apk1&site=3360482&ad=66803/pt.apk',
+    },
+    ios: {
+      fr: 'https://lb-aff.com/L?tag=d_3360482m_22611c_site&site=3360482&ad=22611&r=registration/fr/app/linebet/id1122334455',
+      en: 'https://lb-aff.com/L?tag=d_3360482m_22611c_site&site=3360482&ad=22611&r=registration/us/app/linebet/id1122334455',
+      ar: 'https://lb-aff.com/L?tag=d_3360482m_22611c_site&site=3360482&ad=22611&r=registration/ae/app/linebet/id1122334455',
+      pt: 'https://lb-aff.com/L?tag=d_3360482m_22611c_site&site=3360482&ad=22611&r=registration/br/app/linebet/id1122334455',
+    }
+  },
+  'betwinner': {
+    android: {
+      fr: 'https://betwinner.com/mobile/fr.apk',
+      en: 'https://betwinner.com/mobile/en.apk',
+      ar: 'https://betwinner.com/mobile/ar.apk',
+      pt: 'https://betwinner.com/mobile/pt.apk',
+    },
+    ios: {
+      fr: 'https://betwinner.com/mobile/fr/app/betwinner/id5566778899',
+      en: 'https://betwinner.com/mobile/us/app/betwinner/id5566778899',
+      ar: 'https://betwinner.com/mobile/ae/app/betwinner/id5566778899',
+      pt: 'https://betwinner.com/mobile/br/app/betwinner/id5566778899',
+    }
+  },
+  '888starz': {
+    android: {
+      fr: 'https://buy785.online/L?tag=d_3345117m_72473c_&site=3345117&ad=72473/fr.apk',
+      en: 'https://buy785.online/L?tag=d_3345117m_72473c_&site=3345117&ad=72473/en.apk',
+      ar: 'https://buy785.online/L?tag=d_3345117m_72473c_&site=3345117&ad=72473/ar.apk',
+      pt: 'https://buy785.online/L?tag=d_3345117m_72473c_&site=3345117&ad=72473/pt.apk',
+    },
+    ios: {
+      fr: 'https://buy785.online/L?tag=d_3345117m_78555c_&site=3345117&ad=78555/fr/app/888starz/id9988776655',
+      en: 'https://buy785.online/L?tag=d_3345117m_78555c_&site=3345117&ad=78555/us/app/888starz/id9988776655',
+      ar: 'https://buy785.online/L?tag=d_3345117m_78555c_&site=3345117&ad=78555/ae/app/888starz/id9988776655',
+      pt: 'https://buy785.online/L?tag=d_3345117m_78555c_&site=3345117&ad=78555/br/app/888starz/id9988776655',
+    }
+  },
+  'winwin': {
+    android: {
+      fr: 'https://refpakrtsb.top/L?tag=d_3207713m_18645c_&site=3207713&ad=18645/fr.apk',
+      en: 'https://refpakrtsb.top/L?tag=d_3207713m_18645c_&site=3207713&ad=18645/en.apk',
+      ar: 'https://refpakrtsb.top/L?tag=d_3207713m_18645c_&site=3207713&ad=18645/ar.apk',
+      pt: 'https://refpakrtsb.top/L?tag=d_3207713m_18645c_&site=3207713&ad=18645/pt.apk',
+    },
+    ios: {
+      fr: 'https://refpa443273.top/L?tag=d_4438055m_120987c_&site=4438055&ad=120987/fr/app/winwin/id4433221100',
+      en: 'https://refpa443273.top/L?tag=d_4438055m_120987c_&site=4438055&ad=120987/us/app/winwin/id4433221100',
+      ar: 'https://refpa443273.top/L?tag=d_4438055m_120987c_&site=4438055&ad=120987/ae/app/winwin/id4433221100',
+      pt: 'https://refpa443273.top/L?tag=d_4438055m_120987c_&site=4438055&ad=120987/br/app/winwin/id4433221100',
+    }
+  }
+};
+
+// Route /redirect avec choix iOS / Android
+app.get('/redirect', (req, res) => {
+  const subacc = req.query.u;
+  const bookmaker = (req.query.bk || '').toLowerCase();
+  if (!subacc) return res.send('❌ Utilisateur inconnu.');
+
+  const lang = req.headers['accept-language'] || '';
+  const promoCode = 'P999X';
+
+  let langCode = 'fr';
+  if (lang.includes('ar')) langCode = 'ar';
+  else if (lang.includes('pt')) langCode = 'pt';
+  else if (lang.includes('en')) langCode = 'en';
+
+  const androidUrl = appLinks[bookmaker]?.android?.[langCode] || 'https://default-apk.com/fr.apk';
+  const iosUrl = appLinks[bookmaker]?.ios?.[langCode] || 'https://apps.apple.com/fr/app/default-app/id000000000';
+
+  res.send(`
+    <html><head><meta charset="UTF-8"><title>Téléchargement</title></head><body style="text-align:center; font-family:sans-serif; padding:40px;">
+      <h1>📲 Merci de passer par notre lien ${bookmaker.toUpperCase()} !</h1>
+      <p>Code promo : <b>${promoCode}</b></p>
+      <a href="${androidUrl}" style="display:inline-block; margin:20px; padding:20px; background:#3DDC84; color:#fff; font-size:20px; text-decoration:none; border-radius:10px;">⬇️ Télécharger Android</a>
+      <a href="${iosUrl}" style="display:inline-block; margin:20px; padding:20px; background:#007AFF; color:#fff; font-size:20px; text-decoration:none; border-radius:10px;">⬇️ Télécharger iOS</a>
+    </body></html>
+  `);
+});
 
 
+// 🔁 POSTBACK tracking
+app.post('/postback', async (req, res) => {
+  const { subacc, event, amount, currency } = req.body;
+  const telegramId = parseInt(subacc);
+  if (!telegramId || !event || !amount || !currency) return res.status(400).send('❌ Données manquantes');
 
-(async () => {
-  const res = await fetch('https://api64.ipify.org?format=json');
-  const json = await res.json();
-  console.log(json.ip);
-})();
+  try {
+    const depositAmount = parseFloat(amount);
+    const currencyUpper = currency.toUpperCase();
+    const amountInFcfa = convertToFcfa(depositAmount, currencyUpper);
+    const MIN_FCFA = 2000;
+
+    await pool.query(`INSERT INTO deposits_log (telegram_id, event_type, original_amount, currency, amount_in_fcfa)
+      VALUES ($1, $2, $3, $4, $5)`, [telegramId, event, depositAmount, currencyUpper, amountInFcfa]);
+
+    if (event === 'deposit') {
+      if (amountInFcfa >= MIN_FCFA) {
+        const check = await pool.query('SELECT 1 FROM verified_users WHERE telegram_id = $1', [telegramId]);
+        if (check.rows.length === 0) {
+          await pool.query('INSERT INTO verified_users (telegram_id) VALUES ($1)', [telegramId]);
+          await bot.sendMessage(telegramId, `✅ Dépôt confirmé : ${depositAmount} ${currency}\n🔓 Accès débloqué aux coupons.`);
+        } else {
+          const today = new Date().toISOString().slice(0, 10);
+          const coupon = await pool.query(`SELECT content FROM daily_pronos WHERE type = 'premium' AND created_at::date = $1 LIMIT 1`, [today]);
+          if (coupon.rows.length > 0) {
+            await bot.sendMessage(telegramId, `🔥 Merci pour ton nouveau dépôt !\nVoici un coupon PREMIUM bonus :\n\n${coupon.rows[0].content}`);
+          }
+        }
+      } else {
+        await bot.sendMessage(telegramId, `⚠️ Dépôt insuffisant : ${Math.round(amountInFcfa)} FCFA. Minimum requis : 2000 FCFA.`);
+      }
+    }
+
+    res.send('OK');
+  } catch (err) {
+    console.error("Erreur postback:", err);
+    res.status(500).send('Erreur serveur');
+  }
+});
+
+// ✅ Commande de test
+bot.onText(/\/test/, (msg) => {
+  bot.sendMessage(msg.chat.id, "Bot et serveur ✅ fonctionnels");
+});
