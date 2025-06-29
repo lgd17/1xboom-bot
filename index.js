@@ -915,8 +915,6 @@ let pendingCoupon = {};
 
 
 
-const pendingCoupon = {};
-
 bot.onText(/\/ajouter_prono/, (msg) => {
   const chatId = msg.chat.id;
   if (chatId !== ADMIN_ID) return bot.sendMessage(chatId, "🚫 Commande réservée à l’admin.");
