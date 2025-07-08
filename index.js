@@ -79,6 +79,9 @@ app.listen(port, () => {
   console.log(`🚀 Serveur lancé sur le port ${port}`);
 });
 
+// ====== ACTIVATION DE L’ENVOI AUTOMATIQUE FIXE ======
+setupAutoSender(bot);
+
 // ====== POSTGRESQL ======
 const { Pool } = require("pg");
 // --- /start + gestion parrainage + points ---
@@ -724,105 +727,119 @@ async function envoyerMessageComplet(bot, chatId, message) {
 // VÉRIFICATION_USER-INSCRIT
 const bookmakers = ["1xBet", "Bet365", "ParionsSport"];
 
-bot.onText(/📌 Pronostic du jour/, async (msg) => {
-  const userId = msg.from.id;
+// === Gestion Pronostic du jour propre (avec userStates) ===
+
+bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
+  const text = msg.text;
 
-  const verified = await pool.query(
-    `SELECT 1 FROM verified_users WHERE telegram_id = $1`,
-    [userId]
-  );
+  // Ignore commandes comme /start
+  if (text && text.startsWith("/")) return;
 
-  if (verified.rows.length > 0) {
-    // ✅ Envoyer le pronostic automatique
-    const pronostic = await getTodayPronostic(); // fonction à créer
-    return bot.sendMessage(chatId, `🎯 *Pronostic du jour* :\n\n${pronostic}`, {
-      parse_mode: "Markdown",
-    });
-  }
+  // --- Système d'états (mini-dialogue utilisateur) ---
+  const state = userStates[chatId];
 
-  // ❌ Non vérifié → début du mini dialogue
-  bot.sendMessage(
-    chatId,
-    "🚫 Tu n’es pas encore validé. Choisis ton bookmaker :",
-    {
-      reply_markup: {
-        keyboard: bookmakers.map((b) => [{ text: b }]),
-        resize_keyboard: true,
-        one_time_keyboard: true,
-      },
-    }
-  );
+  if (text === "🎯 Pronostics du jour") {
+    try {
+      const res = await pool.query(
+        "SELECT * FROM verified_users WHERE telegram_id = $1",
+        [chatId]
+      );
 
-  bot.once("message", async (msg2) => {
-    const bookmaker = msg2.text;
-
-    bot.sendMessage(chatId, "🆔 Envoie ton Identifiants");
-
-    bot.once("message", async (msg3) => {
-      const depotId = msg3.text.trim();
-
-      if (!/^\d{7,10}$/.test(depotId)) {
-        return bot.sendMessage(
-          chatId,
-          "❌ 🆔 Identifiant de votre compte invalide. Il doit contenir entre 7 et 10 chiffres. Réessaye en recommençant."
-        );
+      if (res.rows.length > 0) {
+        return bot.sendMessage(chatId, "🟢 Voici le pronostic du jour :\n\n🎯 🔥 ⚽️");
       }
 
-      bot.sendMessage(chatId, "💸 Montant déposé (€) :");
+      // Utilisateur non vérifié : initie le dialogue
+      userStates[chatId] = { step: "await_bookmaker" };
 
-      const askAmount = () => {
-        bot.once("message", async (msg4) => {
-          const amount = parseFloat(msg4.text.replace(",", "."));
+      return bot.sendMessage(
+        chatId,
+        "🔐 Pour accéder aux pronostics, quel bookmaker as-tu utilisé ?",
+        {
+          reply_markup: {
+            keyboard: [
+              ["1xbet", "888starz", "Linebet"],
+              ["Melbet", "Betwinner", "Winwin"],
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: true,
+          },
+        }
+      );
+    } catch (err) {
+      console.error(err);
+      return bot.sendMessage(chatId, "❌ Erreur. Réessaie plus tard.");
+    }
+  }
 
-          if (isNaN(amount)) {
-            await bot.sendMessage(
-              chatId,
-              "❌ Ce n'est pas un nombre valide. Réessaye :"
-            );
-            return askAmount();
-          }
+  // === Suite du dialogue ===
 
-          if (amount < 5) {
-            await bot.sendMessage(
-              chatId,
-              "❌ Le montant doit être au minimum de 5€."
-            );
-            return askAmount();
-          }
+  // Étape : bookmaker
+  if (state?.step === "await_bookmaker") {
+    userStates[chatId].bookmaker = text;
+    userStates[chatId].step = "await_deposit_id";
 
-          if (amount > 10000) {
-            await bot.sendMessage(
-              chatId,
-              "❌ Le montant ne peut pas dépasser 10000€."
-            );
-            return askAmount();
-          }
+    return bot.sendMessage(chatId, "🆔 Envoie ton identifiant de compte (7 à 10 chiffres) :");
+  }
 
-          // ✅ Enregistrement en base
-          await pool.query(
-            `
-            INSERT INTO pending_verifications (telegram_id, bookmaker, depot_id, amount)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (telegram_id) DO UPDATE
-            SET bookmaker = EXCLUDED.bookmaker,
-                depot_id = EXCLUDED.depot_id,
-                amount = EXCLUDED.amount
-          `,
-            [userId, bookmaker, depotId, amount]
-          );
+  // Étape : identifiant de dépôt
+  if (state?.step === "await_deposit_id") {
+    const depositId = text.trim();
 
-          bot.sendMessage(
-            chatId,
-            "✅ Merci ! Ton compte est en attente de validation. Tu seras notifié dès que tu seras validé."
-          );
-        });
-      };
+    if (!/^\d{7,10}$/.test(depositId)) {
+      return bot.sendMessage(chatId, "❌ ID invalide. Envoie un ID entre 7 et 10 chiffres.");
+    }
 
-      askAmount();
-    });
-  });
+    // Vérifie doublon
+    const { rows } = await pool.query(
+      "SELECT 1 FROM pending_verifications WHERE deposit_id = $1",
+      [depositId]
+    );
+    if (rows.length > 0) {
+      return bot.sendMessage(chatId, "⚠️ Cet ID est déjà en attente de vérification.");
+    }
+
+    userStates[chatId].deposit_id = depositId;
+    userStates[chatId].step = "await_amount";
+
+    return bot.sendMessage(chatId, "💵 Quel montant as-tu déposé ? (ex : 2000 FCFA, 10€)");
+  }
+
+  // Étape : montant
+  if (state?.step === "await_amount") {
+    const match = text.match(/(\d+(?:[.,]\d+)?)/);
+    const amount = match ? parseFloat(match[1].replace(",", ".")) : NaN;
+
+    if (isNaN(amount) || amount < 5 || amount > 10000) {
+      return bot.sendMessage(
+        chatId,
+        "❌ Montant invalide. Envoie un montant entre 5 et 10 000."
+      );
+    }
+
+    try {
+      await pool.query(
+        `INSERT INTO pending_verifications (telegram_id, bookmaker, deposit_id, amount)
+         VALUES ($1, $2, $3, $4)`,
+        [
+          chatId,
+          userStates[chatId].bookmaker,
+          userStates[chatId].deposit_id,
+          amount,
+        ]
+      );
+
+      bot.sendMessage(chatId, "✅ Merci ! Ton compte est en attente de validation. Tu seras notifié dès que tu seras validé.");
+      delete userStates[chatId]; // Nettoie l'état après finalisation
+    } catch (err) {
+      console.error("Erreur enregistrement :", err);
+      bot.sendMessage(chatId, "❌ Une erreur est survenue. Réessaie plus tard.");
+    }
+  }
 });
+
+
 
 /////////////////////////////////////// ✅ VOIRE LES VÉRIFICATIONS EN ATTENTE ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 //=== COMMANDE /admin ====
@@ -2032,54 +2049,6 @@ bot.on("message", async (msg) => {
   }
 });
 
-// === Envoi automatique toutes les minutes ===
-async function sendFixedMessages() {
-  try {
-    const { rows } = await pool.query("SELECT * FROM message_fixes");
-    const now = new Date();
-    const heureStr = now.toTimeString().slice(0, 5); // "HH:MM"
-
-    for (const row of rows) {
-      if (!row.heures) continue;
-      const heures = row.heures.split(",").map((h) => h.trim());
-      if (heures.includes(heureStr)) {
-        try {
-          if (row.media_url?.startsWith("http")) {
-            await bot.sendMessage(channelId, row.media_text);
-          } else if (
-            row.media_url?.includes("AgAC") ||
-            row.media_url?.includes("photo")
-          ) {
-            await bot.sendPhoto(channelId, row.media_url, {
-              caption: row.media_text,
-            });
-          } else if (
-            row.media_url?.includes("BAAD") ||
-            row.media_url?.includes("video")
-          ) {
-            await bot.sendVideo(channelId, row.media_url, {
-              caption: row.media_text,
-            });
-          } else if (
-            row.media_url?.includes("AwAD") ||
-            row.media_url?.includes("voice")
-          ) {
-            await bot.sendVoice(channelId, row.media_url);
-            await bot.sendMessage(channelId, row.media_text);
-          } else {
-            await bot.sendMessage(channelId, row.media_text);
-          }
-        } catch (err) {
-          console.error("Erreur envoi automatique:", err);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Erreur récupération messages fixes:", err);
-  }
-}
-
-schedule.scheduleJob("* * * * *", sendFixedMessages);
 
 // ====== AUTRES COMMANDES/LOGIQUE ICI =======
 // Par exemple /start etc.
