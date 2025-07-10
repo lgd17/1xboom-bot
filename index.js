@@ -1870,107 +1870,119 @@ bot.on("callback_query", async (query) => {
   }
 });
 
-  // ✅ Test du message fixe
-  if (data.startsWith("testfixed_")) {
-    const id = data.split("_")[1];
-    try {
-      const { rows } = await pool.query(
-        "SELECT * FROM message_fixes WHERE id = $1",
-        [id]
-      );
+bot.on("callback_query", async (query) => {
+  try {
+    const data = query.data;
+    const chatId = query.message.chat.id;
+    const userId = query.from.id;
+
+    // ✅ Test du message fixe
+    if (data.startsWith("testfixed_")) {
+      const id = data.split("_")[1];
+      const { rows } = await pool.query("SELECT * FROM message_fixes WHERE id = $1", [id]);
       const row = rows[0];
-      if (!row) return bot.sendMessage(chatId, "❌ Message introuvable.");
+      if (!row) {
+        await bot.sendMessage(chatId, "❌ Message introuvable.");
+        return;
+      }
 
       const keyboard = {
         inline_keyboard: [
           [
-            {
-              text: "📢 Publier maintenant",
-              callback_data: `publishfixed_${id}`,
-            },
+            { text: "📢 Publier maintenant", callback_data: `publishfixed_${id}` },
             { text: "❌ Annuler", callback_data: "cancel_publishfixed" },
           ],
         ],
       };
 
-      if (row.media_type === "photo") {
-        await bot.sendPhoto(chatId, row.media_url, {
-          caption: row.media_text,
-          reply_markup: keyboard,
-        });
-      } else if (row.media_type === "video") {
-        await bot.sendVideo(chatId, row.media_url, {
-          caption: row.media_text,
-          reply_markup: keyboard,
-        });
-      } else if (row.media_type === "voice") {
-        await bot.sendVoice(chatId, row.media_url);
-        await bot.sendMessage(chatId, row.media_text, { reply_markup: keyboard });
-      } else if (row.media_type === "audio") {
-        await bot.sendAudio(chatId, row.media_url);
-        await bot.sendMessage(chatId, row.media_text, { reply_markup: keyboard });
-      } else {
-        await bot.sendMessage(chatId, row.media_text, { reply_markup: keyboard });
+      switch (row.media_type) {
+        case "photo":
+          await bot.sendPhoto(chatId, row.media_url, {
+            caption: row.media_text,
+            reply_markup: keyboard,
+          });
+          break;
+        case "video":
+          await bot.sendVideo(chatId, row.media_url, {
+            caption: row.media_text,
+            reply_markup: keyboard,
+          });
+          break;
+        case "voice":
+          await bot.sendVoice(chatId, row.media_url);
+          await bot.sendMessage(chatId, row.media_text, { reply_markup: keyboard });
+          break;
+        case "audio":
+          await bot.sendAudio(chatId, row.media_url);
+          await bot.sendMessage(chatId, row.media_text, { reply_markup: keyboard });
+          break;
+        default:
+          await bot.sendMessage(chatId, row.media_text, { reply_markup: keyboard });
+          break;
       }
-    } catch (err) {
-      console.error(err);
-      await bot.sendMessage(chatId, "❌ Erreur lors du test.");
     }
-  }
 
-  // ✅ Publication dans le canal
-  if (data.startsWith("publishfixed_")) {
-    const id = data.split("_")[1];
-    try {
-      const { rows } = await pool.query(
-        "SELECT * FROM message_fixes WHERE id = $1",
-        [id]
-      );
+    // ✅ Publication dans le canal
+    else if (data.startsWith("publishfixed_")) {
+      const id = data.split("_")[1];
+      const { rows } = await pool.query("SELECT * FROM message_fixes WHERE id = $1", [id]);
       const row = rows[0];
-      if (!row) return bot.sendMessage(chatId, "❌ Message introuvable.");
+      if (!row) {
+        await bot.sendMessage(chatId, "❌ Message introuvable.");
+        return;
+      }
 
-      if (row.media_type === "photo") {
-        await bot.sendPhoto(channelId, row.media_url, { caption: row.media_text });
-      } else if (row.media_type === "video") {
-        await bot.sendVideo(channelId, row.media_url, { caption: row.media_text });
-      } else if (row.media_type === "voice") {
-        await bot.sendVoice(channelId, row.media_url);
-        await bot.sendMessage(channelId, row.media_text);
-      } else if (row.media_type === "audio") {
-        await bot.sendAudio(channelId, row.media_url);
-        await bot.sendMessage(channelId, row.media_text);
-      } else if (row.media_url?.startsWith("http")) {
-        await bot.sendMessage(channelId, `${row.media_text}\n🔗 ${row.media_url}`);
-      } else {
-        await bot.sendMessage(channelId, row.media_text);
+      switch (row.media_type) {
+        case "photo":
+          await bot.sendPhoto(channelId, row.media_url, { caption: row.media_text });
+          break;
+        case "video":
+          await bot.sendVideo(channelId, row.media_url, { caption: row.media_text });
+          break;
+        case "voice":
+          await bot.sendVoice(channelId, row.media_url);
+          await bot.sendMessage(channelId, row.media_text);
+          break;
+        case "audio":
+          await bot.sendAudio(channelId, row.media_url);
+          await bot.sendMessage(channelId, row.media_text);
+          break;
+        default:
+          if (row.media_url?.startsWith("http")) {
+            await bot.sendMessage(channelId, `${row.media_text}\n🔗 ${row.media_url}`);
+          } else {
+            await bot.sendMessage(channelId, row.media_text);
+          }
+          break;
       }
 
       await bot.sendMessage(chatId, "✅ Message publié dans le canal.");
-    } catch (err) {
-      console.error(err);
-      await bot.sendMessage(chatId, "❌ Erreur lors de la publication.");
     }
-  }
 
-  if (data === "cancel_publishfixed") {
-    await bot.sendMessage(chatId, "❌ Publication annulée.");
-  }
-
-  // ✅ Suppression du message fixe
-  if (data.startsWith("deletefixed_")) {
-    if (userId.toString() !== adminId)
-      return bot.answerCallbackQuery(query.id, { text: "Pas autorisé" });
-    const id = data.split("_")[1];
-    try {
-      await pool.query("DELETE FROM message_fixes WHERE id=$1", [id]);
-      await bot.sendMessage(chatId, `✅ Message ${id} supprimé.`);
-    } catch (err) {
-      console.error(err);
-      await bot.sendMessage(chatId, "❌ Erreur lors de la suppression.");
+    // ✅ Annulation de la publication
+    else if (data === "cancel_publishfixed") {
+      await bot.sendMessage(chatId, "❌ Publication annulée.");
     }
-  }
 
-  await bot.answerCallbackQuery(query.id);
+    // ✅ Suppression du message fixe
+    else if (data.startsWith("deletefixed_")) {
+      if (userId.toString() !== adminId) {
+        await bot.answerCallbackQuery(query.id, { text: "🚫 Action non autorisée." });
+        return;
+      }
+
+      const id = data.split("_")[1];
+      await pool.query("DELETE FROM message_fixes WHERE id = $1", [id]);
+      await bot.sendMessage(chatId, `✅ Message #${id} supprimé.`);
+    }
+
+    // ✅ Toujours répondre au callback
+    await bot.answerCallbackQuery(query.id);
+
+  } catch (err) {
+    console.error("❌ Erreur dans callback_query:", err);
+    await bot.sendMessage(query.message.chat.id, "⚠️ Une erreur est survenue.");
+  }
 });
 
 /////////////////////////////////////// ✅ AFFICHÉ LA LISTE DES  MESSAGES_AUTO-FIXES ✅\\\\\\\\\\\\\\\\\\\\
