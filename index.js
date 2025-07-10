@@ -1434,7 +1434,7 @@ bot.on("message", async (msg) => {
     state.step = 2;
     return bot.sendMessage(
       chatId,
-      "📎 Envoie un **média** (image ou vidéo) OU tape `non` si tu n'en veux pas."
+      "📎 Envoie un **média** (image, vidéo, audio, voice) OU tape `non` si tu n'en veux pas."
     );
   }
 
@@ -1442,17 +1442,27 @@ bot.on("message", async (msg) => {
   if (state.step === 2) {
     if (msg.text && msg.text.toLowerCase() === "non") {
       state.media_url = null;
+      state.media_type = null;
     } else if (msg.photo) {
       const fileId = msg.photo[msg.photo.length - 1].file_id;
       state.media_url = fileId;
+      state.media_type = "photo";
     } else if (msg.video) {
       state.media_url = msg.video.file_id;
+      state.media_type = "video";
+    } else if (msg.voice) {
+      state.media_url = msg.voice.file_id;
+      state.media_type = "voice";
+    } else if (msg.audio) {
+      state.media_url = msg.audio.file_id;
+      state.media_type = "audio";
     } else if (msg.text && msg.text.startsWith("http")) {
       state.media_url = msg.text;
+      state.media_type = null; // Lien direct, type inconnu
     } else {
       return bot.sendMessage(
         chatId,
-        "⛔ Format non reconnu. Envoie une image, une vidéo ou tape `non`."
+        "⛔ Format non reconnu. Envoie une image, une vidéo, un audio, un vocal ou tape `non`."
       );
     }
 
@@ -1483,23 +1493,17 @@ bot.on("message", async (msg) => {
       .second(0)
       .millisecond(0);
 
-    // Si l'heure est déjà passée aujourd'hui, planifier pour demain
     if (sendDate.isBefore(now)) {
       sendDate = sendDate.add(1, "day");
     }
 
     try {
       await pool.query(
-        `INSERT INTO messages_auto (contenu, media_url, send_date) VALUES ($1, $2, $3)`,
-        [state.contenu, state.media_url, sendDate.toDate()]
+        `INSERT INTO messages_auto (contenu, media_url, media_type, send_date) VALUES ($1, $2, $3, $4)`,
+        [state.contenu, state.media_url, state.media_type, sendDate.toDate()]
       );
 
-      const resume = `✅ Message enregistré avec succès :
-📝 Texte : ${state.contenu}
-🎞 Média : ${state.media_url ? "Oui" : "Aucun"}
-🕒 Envoi prévu : ${sendDate.format("HH:mm")} (${sendDate.format(
-        "DD/MM/YYYY"
-      )})`;
+      const resume = `✅ Message enregistré avec succès :\n📝 Texte : ${state.contenu}\n🎞 Média : ${state.media_type || "Aucun"}\n🕒 Envoi prévu : ${sendDate.format("HH:mm")} (${sendDate.format("DD/MM/YYYY")})`;
 
       await bot.sendMessage(chatId, resume);
     } catch (err) {
@@ -1643,9 +1647,8 @@ bot.on("callback_query", async (query) => {
 
   bot.answerCallbackQuery(query.id); // Pour faire disparaître le loading
 });
-
-/////////////////////////////////////// ✅ AJOUTÉ LES MESSAGES_AUTO-FIXES ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-//=== COMMANDE / addfixedmsg ===
+/////////////////////////////////////// ✅ AJOUTER DES  MESSAGES_AUTO-FIXES ✅\\\\\\\\\\\\\\\\\\\\
+//=== COMMANDE /addfixedmsg =====
 
 bot.onText(/\/addfixedmsg/, (msg) => {
   if (msg.from.id.toString() !== adminId) return;
@@ -1655,8 +1658,7 @@ bot.onText(/\/addfixedmsg/, (msg) => {
   });
 });
 
-/////////////////////////////////////// ✅ ÉDITÉ LES  MESSAGES_AUTO-FIXES ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-//=== COMMANDE / editfixedmsg ===
+//=== COMMANDE /editfixedmsg ===
 
 bot.onText(/\/editfixedmsg (\d+)/, async (msg, match) => {
   const chatId = msg.chat.id;
@@ -1694,17 +1696,30 @@ bot.on("message", async (msg) => {
   if ((!editState && !addState) || msg.text?.startsWith("/")) return;
 
   const handleMedia = (state, msg) => {
-    if (msg.text && msg.text.toLowerCase() === "non") state.media_url = null;
-    else if (msg.photo) state.media_url = msg.photo.at(-1).file_id;
-    else if (msg.video) state.media_url = msg.video.file_id;
-    else if (msg.voice) state.media_url = msg.voice.file_id;
-    else if (msg.text && msg.text.startsWith("http"))
+    if (msg.text && msg.text.toLowerCase() === "non") {
+      state.media_url = null;
+      state.media_type = null;
+    } else if (msg.photo) {
+      state.media_url = msg.photo.at(-1).file_id;
+      state.media_type = "photo";
+    } else if (msg.video) {
+      state.media_url = msg.video.file_id;
+      state.media_type = "video";
+    } else if (msg.voice) {
+      state.media_url = msg.voice.file_id;
+      state.media_type = "voice";
+    } else if (msg.audio) {
+      state.media_url = msg.audio.file_id;
+      state.media_type = "audio";
+    } else if (msg.text && msg.text.startsWith("http")) {
       state.media_url = msg.text;
-    else return false;
+      state.media_type = null;
+    } else {
+      return false;
+    }
     return true;
   };
 
-  // ÉDITION
   if (editState) {
     if (editState.step === 1) {
       editState.media_text = msg.text;
@@ -1734,11 +1749,7 @@ bot.on("message", async (msg) => {
         return bot.sendMessage(chatId, "❌ Format d'heure invalide.");
       editState.heures = heures.join(",");
 
-      const resume = `📝 *Récapitulatif :*\n🆔 ID : ${
-        editState.id
-      }\n📄 Texte : ${editState.media_text}\n🎞 Média : ${
-        editState.media_url ? "Oui" : "Aucun"
-      }\n⏰ Heures : ${editState.heures}`;
+      const resume = `📝 *Récapitulatif :*\n🆔 ID : ${editState.id}\n📄 Texte : ${editState.media_text}\n🎞 Média : ${editState.media_url ? "Oui" : "Aucun"}\n⏰ Heures : ${editState.heures}`;
       bot.sendMessage(chatId, resume, {
         parse_mode: "Markdown",
         reply_markup: {
@@ -1755,7 +1766,6 @@ bot.on("message", async (msg) => {
     return;
   }
 
-  // AJOUT
   if (addState) {
     if (addState.step === 1) {
       addState.media_text = msg.text;
@@ -1785,11 +1795,7 @@ bot.on("message", async (msg) => {
         return bot.sendMessage(chatId, "❌ Format d'heure invalide.");
       addState.heures = heures.join(",");
 
-      const resume = `🆕 *Nouveau message fixe :*\n📄 Texte : ${
-        addState.media_text
-      }\n🎞 Média : ${addState.media_url ? "Oui" : "Aucun"}\n⏰ Heures : ${
-        addState.heures
-      }`;
+      const resume = `🆕 *Nouveau message fixe :*\n📄 Texte : ${addState.media_text}\n🎞 Média : ${addState.media_url ? "Oui" : "Aucun"}\n⏰ Heures : ${addState.heures}`;
       bot.sendMessage(chatId, resume, {
         parse_mode: "Markdown",
         reply_markup: {
@@ -1806,7 +1812,7 @@ bot.on("message", async (msg) => {
   }
 });
 
-// ====== CALLBACK QUERIES =======
+// ✅ MISE À JOUR CALLBACK QUERIES POUR AJOUTER media_type DANS LA BDD
 bot.on("callback_query", async (query) => {
   const userId = query.from.id;
   const chatId = query.message.chat.id;
@@ -1817,10 +1823,11 @@ bot.on("callback_query", async (query) => {
   if (data === "confirm_edit" && editState) {
     try {
       await pool.query(
-        "UPDATE message_fixes SET media_text=$1, media_url=$2, heures=$3 WHERE id=$4",
+        "UPDATE message_fixes SET media_text=$1, media_url=$2, media_type=$3, heures=$4 WHERE id=$5",
         [
           editState.media_text,
           editState.media_url,
+          editState.media_type,
           editState.heures,
           editState.id,
         ]
@@ -1841,8 +1848,13 @@ bot.on("callback_query", async (query) => {
   if (data === "confirm_add" && addState) {
     try {
       await pool.query(
-        "INSERT INTO message_fixes (media_text, media_url, heures) VALUES ($1, $2, $3)",
-        [addState.media_text, addState.media_url, addState.heures]
+        "INSERT INTO message_fixes (media_text, media_url, media_type, heures) VALUES ($1, $2, $3, $4)",
+        [
+          addState.media_text,
+          addState.media_url,
+          addState.media_type,
+          addState.heures,
+        ]
       );
       await bot.sendMessage(chatId, "✅ Message ajouté !");
     } catch (err) {
@@ -1856,8 +1868,9 @@ bot.on("callback_query", async (query) => {
     await bot.sendMessage(chatId, "❌ Ajout annulé.");
     delete fixedAddStates[userId];
   }
+});
 
-  // Gestion test et publication
+  // ✅ Test du message fixe
   if (data.startsWith("testfixed_")) {
     const id = data.split("_")[1];
     try {
@@ -1867,9 +1880,6 @@ bot.on("callback_query", async (query) => {
       );
       const row = rows[0];
       if (!row) return bot.sendMessage(chatId, "❌ Message introuvable.");
-
-      const text = row.media_text;
-      const media = row.media_url;
 
       const keyboard = {
         inline_keyboard: [
@@ -1883,28 +1893,32 @@ bot.on("callback_query", async (query) => {
         ],
       };
 
-      if (media?.startsWith("http"))
-        await bot.sendMessage(chatId, text, { reply_markup: keyboard });
-      else if (media?.includes("AgAC") || media?.includes("photo"))
-        await bot.sendPhoto(chatId, media, {
-          caption: text,
+      if (row.media_type === "photo") {
+        await bot.sendPhoto(chatId, row.media_url, {
+          caption: row.media_text,
           reply_markup: keyboard,
         });
-      else if (media?.includes("BAAD") || media?.includes("video"))
-        await bot.sendVideo(chatId, media, {
-          caption: text,
+      } else if (row.media_type === "video") {
+        await bot.sendVideo(chatId, row.media_url, {
+          caption: row.media_text,
           reply_markup: keyboard,
         });
-      else if (media?.includes("AwAD") || media?.includes("voice")) {
-        await bot.sendVoice(chatId, media);
-        await bot.sendMessage(chatId, text, { reply_markup: keyboard });
-      } else await bot.sendMessage(chatId, text, { reply_markup: keyboard });
+      } else if (row.media_type === "voice") {
+        await bot.sendVoice(chatId, row.media_url);
+        await bot.sendMessage(chatId, row.media_text, { reply_markup: keyboard });
+      } else if (row.media_type === "audio") {
+        await bot.sendAudio(chatId, row.media_url);
+        await bot.sendMessage(chatId, row.media_text, { reply_markup: keyboard });
+      } else {
+        await bot.sendMessage(chatId, row.media_text, { reply_markup: keyboard });
+      }
     } catch (err) {
       console.error(err);
       await bot.sendMessage(chatId, "❌ Erreur lors du test.");
     }
   }
 
+  // ✅ Publication dans le canal
   if (data.startsWith("publishfixed_")) {
     const id = data.split("_")[1];
     try {
@@ -1915,18 +1929,21 @@ bot.on("callback_query", async (query) => {
       const row = rows[0];
       if (!row) return bot.sendMessage(chatId, "❌ Message introuvable.");
 
-      const text = row.media_text;
-      const media = row.media_url;
-
-      if (media?.startsWith("http")) await bot.sendMessage(channelId, text);
-      else if (media?.includes("AgAC") || media?.includes("photo"))
-        await bot.sendPhoto(channelId, media, { caption: text });
-      else if (media?.includes("BAAD") || media?.includes("video"))
-        await bot.sendVideo(channelId, media, { caption: text });
-      else if (media?.includes("AwAD") || media?.includes("voice")) {
-        await bot.sendVoice(channelId, media);
-        await bot.sendMessage(channelId, text);
-      } else await bot.sendMessage(channelId, text);
+      if (row.media_type === "photo") {
+        await bot.sendPhoto(channelId, row.media_url, { caption: row.media_text });
+      } else if (row.media_type === "video") {
+        await bot.sendVideo(channelId, row.media_url, { caption: row.media_text });
+      } else if (row.media_type === "voice") {
+        await bot.sendVoice(channelId, row.media_url);
+        await bot.sendMessage(channelId, row.media_text);
+      } else if (row.media_type === "audio") {
+        await bot.sendAudio(channelId, row.media_url);
+        await bot.sendMessage(channelId, row.media_text);
+      } else if (row.media_url?.startsWith("http")) {
+        await bot.sendMessage(channelId, `${row.media_text}\n🔗 ${row.media_url}`);
+      } else {
+        await bot.sendMessage(channelId, row.media_text);
+      }
 
       await bot.sendMessage(chatId, "✅ Message publié dans le canal.");
     } catch (err) {
@@ -1939,7 +1956,7 @@ bot.on("callback_query", async (query) => {
     await bot.sendMessage(chatId, "❌ Publication annulée.");
   }
 
-  // Gestion suppression
+  // ✅ Suppression du message fixe
   if (data.startsWith("deletefixed_")) {
     if (userId.toString() !== adminId)
       return bot.answerCallbackQuery(query.id, { text: "Pas autorisé" });
@@ -1956,7 +1973,7 @@ bot.on("callback_query", async (query) => {
   await bot.answerCallbackQuery(query.id);
 });
 
-/////////////////////////////////////// ✅ AFFICHÉ LA LISTE DES  MESSAGES_AUTO-FIXES ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+/////////////////////////////////////// ✅ AFFICHÉ LA LISTE DES  MESSAGES_AUTO-FIXES ✅\\\\\\\\\\\\\\\\\\\\
 //=== COMMANDE /fixedmenu ===
 
 bot.onText(/\/fixedmenu/, async (msg) => {
@@ -2011,27 +2028,21 @@ bot.on("callback_query", async (query) => {
       if (!row) {
         await bot.sendMessage(chatId, "❌ Message introuvable.");
       } else {
-        if (row.media_url?.startsWith("http")) {
-          await bot.sendMessage(chatId, row.media_text);
-        } else if (
-          row.media_url?.includes("AgAC") ||
-          row.media_url?.includes("photo")
-        ) {
+        if (row.media_type === "photo") {
           await bot.sendPhoto(chatId, row.media_url, {
             caption: row.media_text,
           });
-        } else if (
-          row.media_url?.includes("BAAD") ||
-          row.media_url?.includes("video")
-        ) {
+        } else if (row.media_type === "video") {
           await bot.sendVideo(chatId, row.media_url, {
             caption: row.media_text,
           });
-        } else if (
-          row.media_url?.includes("AwAD") ||
-          row.media_url?.includes("voice")
-        ) {
+        } else if (row.media_type === "voice") {
           await bot.sendVoice(chatId, row.media_url);
+          await bot.sendMessage(chatId, row.media_text);
+        } else if (row.media_type === "audio") {
+          await bot.sendAudio(chatId, row.media_url);
+          await bot.sendMessage(chatId, row.media_text);
+        } else if (row.media_url?.startsWith("http")) {
           await bot.sendMessage(chatId, row.media_text);
         } else {
           await bot.sendMessage(chatId, row.media_text);
@@ -2046,7 +2057,6 @@ bot.on("callback_query", async (query) => {
       );
     }
 
-    // ✅ Répond TOUJOURS pour éviter "Option inconnue"
     await bot.answerCallbackQuery(query.id);
   } catch (err) {
     console.error("Erreur callback_query:", err);
@@ -2089,15 +2099,12 @@ bot.on("message", async (msg) => {
   }
 });
 
-
 // ====== AUTRES COMMANDES/LOGIQUE ICI =======
-// Par exemple /start etc.
-
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(msg.chat.id, "🤖 Bot démarré et prêt.");
 });
 
-//////////////////////////////////////// Taux de change (exemple)\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+//////////////////////////////////////// Taux de change (exemple)\\\\\\\\\\\\\\\\\\\\\\\\\\
 const rates = {
   FCFA: 1, XOF: 1, CFA: 1,
   USD: 600, EUR: 650, NGN: 1.4, GHS: 50,
@@ -2127,10 +2134,10 @@ const appLinks = {
   },
   'melbet': {
     android: {
-      fr: 'https://https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/fr.apk',
-      en: 'https://https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/en.apk',
-      ar: 'https://https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/ar.apk',
-      pt: 'https://https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/pt.apk',
+      fr: 'https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/fr.apk',
+      en: 'https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/en.apk',
+      ar: 'https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/ar.apk',
+      pt: 'https://refpakrtsb.top/L?tag=d_3207713m_118466c_&site=3207713&ad=118466/pt.apk',
     },
     ios: {
       fr: 'https://refpakrtsb.top/L?tag=d_3207713m_118464c_&site=3207713&ad=118464/fr/app/melbet/id9876543210',
@@ -2197,32 +2204,52 @@ const appLinks = {
   }
 };
 
-// Route /redirect avec choix iOS / Android
+// 📲 Route /redirect dynamique avec détection OS
 app.get('/redirect', (req, res) => {
   const subacc = req.query.u;
   const bookmaker = (req.query.bk || '').toLowerCase();
-  if (!subacc) return res.send('❌ Utilisateur inconnu.');
+  if (!subacc || !bookmaker || !appLinks[bookmaker]) {
+    return res.status(400).send('❌ Lien invalide ou bookmaker non pris en charge.');
+  }
 
-  const lang = req.headers['accept-language'] || '';
-  const promoCode = 'P999X';
-
+  const lang = (req.headers['accept-language'] || '').toLowerCase();
   let langCode = 'fr';
   if (lang.includes('ar')) langCode = 'ar';
   else if (lang.includes('pt')) langCode = 'pt';
   else if (lang.includes('en')) langCode = 'en';
 
-  const androidUrl = appLinks[bookmaker]?.android?.[langCode] || 'https://default-apk.com/fr.apk';
-  const iosUrl = appLinks[bookmaker]?.ios?.[langCode] || 'https://apps.apple.com/fr/app/default-app/id000000000';
+  const androidUrl = appLinks[bookmaker]?.android?.[langCode];
+  const iosUrl = appLinks[bookmaker]?.ios?.[langCode];
+
+  const promoCode = 'P999X';
 
   res.send(`
-    <html><head><meta charset="UTF-8"><title>Téléchargement</title></head><body style="text-align:center; font-family:sans-serif; padding:40px;">
+    <html lang="${langCode}"><head><meta charset="UTF-8"><title>🔁 Redirection...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+      function isIOS() {
+        return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      }
+      function isAndroid() {
+        return /Android/i.test(navigator.userAgent);
+      }
+      window.onload = function() {
+        const androidLink = '${androidUrl}';
+        const iosLink = '${iosUrl}';
+        if (isAndroid()) window.location.href = androidLink;
+        else if (isIOS()) window.location.href = iosLink;
+      };
+    </script></head>
+    <body style="text-align:center; font-family:sans-serif; padding:40px;">
       <h1>📲 Merci de passer par notre lien ${bookmaker.toUpperCase()} !</h1>
       <p>Code promo : <b>${promoCode}</b></p>
+      <p>Si vous n'êtes pas redirigé automatiquement, utilisez les liens ci-dessous :</p>
       <a href="${androidUrl}" style="display:inline-block; margin:20px; padding:20px; background:#3DDC84; color:#fff; font-size:20px; text-decoration:none; border-radius:10px;">⬇️ Télécharger Android</a>
       <a href="${iosUrl}" style="display:inline-block; margin:20px; padding:20px; background:#007AFF; color:#fff; font-size:20px; text-decoration:none; border-radius:10px;">⬇️ Télécharger iOS</a>
     </body></html>
   `);
 });
+
 
 
 // 🔁 POSTBACK tracking
