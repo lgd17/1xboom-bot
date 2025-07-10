@@ -1,16 +1,17 @@
 {
-  "name": "hello-ngrok",
+  "name": "1xboom-bot",
   "version": "1.0.0",
-  "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@ngrok/ngrok": "^1.5.1"
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "node-telegram-bot-api": "^0.61.0",
+    "pg": "^8.11.3",
+    "node-schedule": "^2.1.1",
+    "dayjs": "^1.11.10"
   }
 }
