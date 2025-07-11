@@ -18,17 +18,13 @@ app.use(bodyParser.json());
 // ====== CONFIGURATION ENV ======
 const port = process.env.PORT || 3000;
 const token = process.env.TELEGRAM_TOKEN;
-if (!token) {
-  throw new Error("Telegram Bot Token not provided in environment variables");
-}
+if (!token) throw new Error("❌ TELEGRAM_TOKEN non défini !");
+const baseUrl = process.env.BASE_URL; // ✅ ✅ ✅ à utiliser sur Render !
+if (!baseUrl) throw new Error("❌ BASE_URL manquant dans .env !");
+
 const adminId = process.env.TELEGRAM_ADMIN_ID;
 const channelId = process.env.TELEGRAM_CHANNEL_ID;
-const baseUrl = process.env.WEBHOOK_URL; // ✅ corriger ici (Glitch = https://TON-PROJET.glitch.me)
-if (!token || !baseUrl) {
-  throw new Error("❌ TELEGRAM_TOKEN ou WEBHOOK_URL manquant !");
-}
 
-app.use(bodyParser.json());
 
 // ====== GESTION DES ÉTATS ======
 const userStates = {};
@@ -39,42 +35,41 @@ const userLang = {};
 const fixedAddStates = {};
 const fixedEditStates = {};
 const editStates = {};
+
 // ====== ENCODAGE DU TOKEN POUR L'URL ======
 const encodedToken = encodeURIComponent(token);
 
 // ====== INITIALISATION DU BOT EN MODE WEBHOOK ======
 const bot = new TelegramBot(token, { webHook: true });
 
-bot
-  .setWebHook(`${baseUrl}/bot${encodedToken}`)
-  .then(() =>
-    console.log(`✅ Webhook Telegram configuré : ${baseUrl}/bot${encodedToken}`)
-  )
-  .catch((err) => console.error("❌ Erreur Webhook :", err));
+bot.setWebHook(`${baseUrl}/bot${encodedToken}`)
+  .then(() => console.log(`✅ Webhook configuré : ${baseUrl}/bot${encodedToken}`))
+  .catch(err => console.error("❌ Erreur lors du setWebhook :", err));
 
 // ====== GESTION DES MESSAGES ======
-bot.on('message', (msg) => {
+bot.on("message", (msg) => {
   const chatId = msg.chat.id;
   console.log("📩 Message reçu :", msg.text);
-  bot.sendMessage(chatId, `✅ Bot bien reçu ton message : "${msg.text}"`);
-});
-// Route de ping pour réveiller Render
-app.get('/ping', (req, res) => {
-  console.log('✅ Ping reçu de cron-job.org — Bot réveillé');
-  res.status(200).send('Bot is awake!');
+  bot.sendMessage(chatId, `✅ Reçu : "${msg.text}"`);
 });
 
 // ====== ROUTE POUR TRAITER LES UPDATES DE TELEGRAM ======
 app.post(`/bot${encodedToken}`, (req, res) => {
-  console.log("Requête reçue au webhook");
+  console.log("✅ Webhook → Update reçu");
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// ====== PAGE DE TEST POUR GLITCH ======
-app.get("/", (req, res) => res.send("✅ Bot is alive (webhook mode)"));
+// ====== ROUTE POUR RÉVEILLER RENDER ======
+app.get("/ping", (req, res) => {
+  console.log("✅ Ping reçu — Render réveillé");
+  res.status(200).send("Bot is awake!");
+});
 
-// ====== LANCEMENT DU SERVEUR ======
+// ====== PAGE DE TEST ======
+app.get("/", (req, res) => res.send("✅ Bot Telegram en ligne (mode webhook)"));
+
+// ====== LANCEMENT SERVEUR ======
 app.listen(port, () => {
   console.log(`🚀 Serveur lancé sur le port ${port}`);
 });
