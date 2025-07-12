@@ -5,6 +5,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const { t } = require("./lang");
 const cron = require("node-cron");
+require("./autoCoupons");
 const schedule = require("node-schedule");
 const { generateCoupon } = require("./coupon-api");
 const { pool, insertManualCoupon } = require("./db");
