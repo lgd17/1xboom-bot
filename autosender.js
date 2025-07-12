@@ -54,3 +54,60 @@ module.exports = function setupAutoSender(bot) {
   // 📆 Planification : vérifie chaque minute
   schedule.scheduleJob("* * * * *", sendFixedMessages);
 };
+
+
+const schedule = require("node-schedule");
+const { pool } = require("./db");
+
+module.exports = function setupAutoSender(bot) {
+  schedule.scheduleJob("15 7 * * *", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+
+    // 🔍 Cherche un prono du jour
+    const result = await pool.query(
+      "SELECT * FROM daily_pronos WHERE date = $1 LIMIT 1",
+      [today]
+    );
+
+    if (result.rows.length === 0) return;
+
+    const prono = result.rows[0];
+
+    // 📤 Récupère les utilisateurs validés
+    const users = await pool.query("SELECT telegram_id FROM verified_users");
+
+    for (const user of users.rows) {
+      const chatId = user.telegram_id;
+
+      if (prono.media_type === "photo" && prono.media_url) {
+        await bot.sendPhoto(chatId, prono.media_url, {
+          caption: prono.content,
+          parse_mode: "Markdown",
+        });
+      } else if (prono.media_type === "video" && prono.media_url) {
+        await bot.sendVideo(chatId, prono.media_url, {
+          caption: prono.content,
+          parse_mode: "Markdown",
+        });
+      } else {
+        await bot.sendMessage(chatId, prono.content, {
+          parse_mode: "Markdown",
+        });
+      }
+
+      // ❌ Supprimer le bouton “🎯 Pronostics du jour”
+      await bot.sendMessage(chatId, " ", {
+        reply_markup: {
+          keyboard: [
+            ["🏆 Mes Points"],
+            ["🤝 Parrainage", "🆘 Assistance 🤖"]
+          ],
+          resize_keyboard: true
+        }
+      });
+    }
+
+    console.log(`📤 Prono du ${today} envoyé à ${users.rows.length} utilisateurs`);
+  });
+};
+
