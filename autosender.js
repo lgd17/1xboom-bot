@@ -56,9 +56,6 @@ module.exports = function setupAutoSender(bot) {
 };
 
 
-const schedule = require("node-schedule");
-const { pool } = require("./db");
-
 module.exports = function setupAutoSender(bot) {
   schedule.scheduleJob("15 7 * * *", async () => {
     const today = new Date().toISOString().slice(0, 10);
