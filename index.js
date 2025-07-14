@@ -16,6 +16,13 @@ const generateCouponEurope = require('./generateCouponEurope');
 const generateCouponAfrica = require('./generateCouponAfrica');
 const generateCouponAmerica = require('./generateCouponAmerica');
 const generateCouponAsia = require('./generateCouponAsia');
+const {
+  getConfidence,
+  getSafestBet,
+  getTargetedBet,
+  formatMatchTips
+} = require('./couponUtils');
+
 
 
 
@@ -1173,6 +1180,79 @@ bot.on("message", async (msg) => {
 
 //////////////////////////////////////////////////////// ENVI AUTOMATIQUE DES COUPON DU JOUR \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
+bot.onText(/\/sendtestcoupon/, async (msg) => {
+  const chatId = msg.chat.id;
+  const isAdmin = chatId.toString() === process.env.ADMIN_CHAT_ID;
+
+  if (!isAdmin) {
+    return bot.sendMessage(chatId, "⛔️ Commande réservée à l'administrateur.");
+  }
+
+  const mockBets = [
+    {
+      name: 'Match Winner',
+      values: [
+        { value: 'Home', odd: '1.45' },
+        { value: 'Draw', odd: '3.60' },
+        { value: 'Away', odd: '6.00' }
+      ]
+    },
+    {
+      name: 'Double Chance',
+      values: [
+        { value: '1X', odd: '1.20' },
+        { value: '12', odd: '1.30' },
+        { value: 'X2', odd: '2.10' }
+      ]
+    },
+    {
+      name: 'Over/Under',
+      values: [
+        { value: 'Over 2.5', odd: '1.85' },
+        { value: 'Under 2.5', odd: '1.90' }
+      ]
+    },
+    {
+      name: 'Both Teams Score',
+      values: [
+        { value: 'Yes', odd: '1.75' },
+        { value: 'No', odd: '2.00' }
+      ]
+    }
+  ];
+
+  const tips = [];
+  const winTip = getSafestBet(mockBets, 'Match Winner');
+  if (winTip) tips.push(`🏆 1X2 : ${winTip.value} (${winTip.odd}) ${winTip.confidence}`);
+
+  const dcTip = getSafestBet(mockBets, 'Double Chance');
+  if (dcTip) tips.push(`🔀 Double Chance : ${dcTip.value} (${dcTip.odd}) ${dcTip.confidence}`);
+
+  const overTip = getTargetedBet(mockBets, 'Over/Under', 'Over 2.5');
+  if (overTip) tips.push(`🎯 Over 2.5 : ${overTip.odd} ${overTip.confidence}`);
+
+  const bttsTip = getTargetedBet(mockBets, 'Both Teams Score', 'Yes');
+  if (bttsTip) tips.push(`🤝 BTTS Oui : ${bttsTip.odd} ${bttsTip.confidence}`);
+
+  const message = formatMatchTips({
+    leagueName: 'Ligue 1 🇫🇷',
+    home: 'PSG',
+    away: 'OM',
+    hour: '20:00',
+    tips
+  });
+
+  try {
+    const { rows } = await pool.query('SELECT telegram_id FROM verified_users');
+    for (const row of rows) {
+      await bot.sendMessage(row.telegram_id, message, { parse_mode: 'Markdown' });
+    }
+    await bot.sendMessage(chatId, `✅ Coupon test envoyé à ${rows.length} utilisateurs vérifiés.`);
+  } catch (err) {
+    console.error('❌ Erreur envoi test coupon :', err.message);
+    await bot.sendMessage(chatId, "❌ Une erreur est survenue.");
+  }
+});
 
 
 
