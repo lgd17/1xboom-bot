@@ -3,13 +3,16 @@
   "version": "1.0.0",
   "description": "Bot Telegram 1XBOOM avec PostgreSQL, Express, Cron, Webhook",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
   "type": "commonjs",
   "license": "MIT",
   "engines": {
     "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "api": "node server.js",
+    "daily": "node dailyCouponRunner.js",
+    "dev": "concurrently \"node index.js\" \"node server.js\""
   },
   "dependencies": {
     "body-parser": "^1.20.2",
@@ -22,5 +25,10 @@
     "node-telegram-bot-api": "^0.66.0",
     "pg": "^8.16.0",
     "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
   }
+}
+
 }
