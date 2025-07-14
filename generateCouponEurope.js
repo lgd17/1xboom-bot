@@ -1,6 +1,13 @@
 // generateCouponEurope.js
+// generateCouponEurope.js
 require('dotenv').config();
 const axios = require('axios');
+const {
+  getConfidence,
+  getSafestBet,
+  getTargetedBet,
+  formatMatchTips
+} = require('./couponUtils');
 
 const API_BASE = 'https://v3.football.api-sports.io';
 const headers = { 'x-apisports-key': process.env.API_FOOTBALL_KEY };
@@ -15,15 +22,13 @@ const leaguesEurope = [
   { id: 94, name: 'Primeira Liga 🇵🇹' },
   { id: 203, name: 'Super Lig 🇹🇷' },
   { id: 144, name: 'Belgian Pro League 🇧🇪' },
-  { id: 179, name: 'Scottish Premiership 🏴' },
+  { id: 179, name: 'Scottish Premiership 🇬🇧' },
   { id: 207, name: 'Swiss Super League 🇨🇭' },
   { id: 197, name: 'Greek Super League 🇬🇷' },
   { id: 208, name: 'Danish Superliga 🇩🇰' },
   { id: 218, name: 'Austrian Bundesliga 🇦🇹' },
   { id: 233, name: 'Czech First League 🇨🇿' }
 ];
-
-// (Idem fonction generateCoupon ci-dessus adaptée aux leaguesEurope)
 
 module.exports = async function generateCouponEurope() {
   const today = new Date().toISOString().split('T')[0];
@@ -61,38 +66,6 @@ module.exports = async function generateCouponEurope() {
                           oddsRes.data.response[0]?.bookmakers?.[0];
         const bets = bookmaker?.bets || [];
 
-        // Utilitaire pour récupérer le pari fiable (extrait des fonctions ci-dessus)
-        // Ici tu peux réutiliser getSafestBet et getTargetedBet définis dans un utilitaire commun
-
-        // Exemple d'extraction simplifiée :
-        function getConfidence(odd) {
-          const val = parseFloat(odd);
-          if (val < 1.40) return '💎 Ultra fiable';
-          if (val < 1.60) return '✅ Confiance élevée';
-          return null;
-        }
-        function getSafestBet(bets, betName) {
-          const bet = bets.find(b => b.name === betName);
-          if (!bet || !bet.values) return null;
-
-          const sorted = bet.values
-            .map(v => ({ value: v.value, odd: parseFloat(v.odd) }))
-            .sort((a, b) => a.odd - b.odd);
-
-          const best = sorted[0];
-          const confidence = getConfidence(best.odd);
-          return confidence ? { value: best.value, odd: best.odd, confidence } : null;
-        }
-        function getTargetedBet(bets, betName, target) {
-          const bet = bets.find(b => b.name === betName);
-          if (!bet || !bet.values) return null;
-          const found = bet.values.find(v => v.value === target);
-          if (!found) return null;
-
-          const confidence = getConfidence(found.odd);
-          return confidence ? { value: target, odd: found.odd, confidence } : null;
-        }
-
         const tips = [];
 
         const winTip = getSafestBet(bets, 'Match Winner');
@@ -109,8 +82,7 @@ module.exports = async function generateCouponEurope() {
 
         if (!tips.length) continue;
 
-        const matchBlock = `📌 *${league.name}*\n⚽ *${home} vs ${away}* à ${hour}\n` + tips.join('\n');
-        allMatches.push(matchBlock);
+        allMatches.push(formatMatchTips({ leagueName: league.name, home, away, hour, tips }));
       }
     }
 
@@ -123,7 +95,9 @@ module.exports = async function generateCouponEurope() {
       };
     }
 
-    const finalContent = `🔥 *Coupon du jour – Europe*\n\n${allMatches.join('\n\n')}\n\n💡 Source : API-Football`;
+    const finalContent = `🔥 *Coupon du jour – Europe*
+
+${allMatches.join('\n\n')}\n\n💡 Source : API-Football`;
 
     return {
       content: finalContent,
@@ -141,4 +115,5 @@ module.exports = async function generateCouponEurope() {
     };
   }
 };
+
 
