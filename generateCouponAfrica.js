@@ -66,10 +66,10 @@ module.exports = async function generateCouponAfrica() {
         const dcTip = getSafestBet(bets, 'Double Chance');
         if (dcTip) tips.push(`🔀 Double Chance : ${dcTip.value} (${dcTip.odd}) ${dcTip.confidence}`);
 
-        const overTip = getTargetedBet(bets, 'Over/Under', 'Over 2.5', 'Over 1.5');
+        const overTip = getTargetedBet(bets, 'Over/Under', 'Over 2.5');
         if (overTip) tips.push(`🎯 Over 2.5 : ${overTip.odd} ${overTip.confidence}`);
 
-        const bttsTip = getTargetedBet(bets, 'Both Teams Score', 'Yes/No');
+        const bttsTip = getTargetedBet(bets, 'Both Teams Score', 'Yes');
         if (bttsTip) tips.push(`🤝 BTTS Oui : ${bttsTip.odd} ${bttsTip.confidence}`);
 
         if (!tips.length) continue;
