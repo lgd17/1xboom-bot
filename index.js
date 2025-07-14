@@ -7,10 +7,15 @@ const { t } = require("./lang");
 const cron = require("node-cron");
 require("./autoCoupons");
 const schedule = require("node-schedule");
-const { generateCoupon } = require("./coupon-api");
 const { pool, insertManualCoupon } = require("./db");
 const setupAutoSender = require("./autosender");
 const fetch = require("node-fetch"); // à garder si tu fais des appels API
+const generateCouponEurope = require('./generateCouponEurope');
+const generateCouponAfrica = require('./generateCouponAfrica');
+const generateCouponAmerica = require('./generateCouponAmerica');
+const generateCouponAsia = require('./generateCouponAsia');
+
+
 
 // ====== EXPRESS ======
 const app = express();
