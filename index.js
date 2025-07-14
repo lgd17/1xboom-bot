@@ -259,164 +259,6 @@ bot.on("message", async (msg) => {
     });
   }
 
-  // --- Pronostics du jour - Vérification et collecte ---
-  if (text === "🎯 Pronostics du jour") {
-    try {
-      const res = await pool.query(
-        "SELECT * FROM verified_users WHERE telegram_id = $1",
-        [chatId]
-      );
-      if (res.rows.length > 0) {
-        return bot.sendMessage(
-          chatId,
-          "<b>🟢 Voici le pronostic du jour 🟢</b>\n\n🔰 🔰 🔰 🔰 🔰 🔰 🔰",
-          { parse_mode: "HTML" }
-        );
-      }
-
-      // Non vérifié, lance la collecte
-      userStates[chatId] = { step: "await_bookmaker" };
-
-      return bot.sendMessage(
-        chatId,
-        "🔐 Pour accéder aux pronostics, merci de compléter ces infos.\n\nQuel bookmaker as-tu utilisé ?",
-        {
-          reply_markup: {
-            inline_keyboard: [
-              ["1xbet", "888starz", "Linebet"].map((b) => ({
-                text: b,
-                callback_data: `bookmaker_${b}`,
-              })),
-              ["Winwin", "Melbet", "Betwinner"].map((b) => ({
-                text: b,
-                callback_data: `bookmaker_${b}`,
-              })),
-            ],
-          },
-        }
-      );
-    } catch (err) {
-      console.error(err);
-      return bot.sendMessage(
-        chatId,
-        "❌ Une erreur est survenue. Réessaie plus tard."
-      );
-    }
-  }
-
-  // --- Mini dialogue Pronostics : étapes ID dépôt et montant ---
-  const state = userStates[chatId];
-  if (state) {
-    if (state.step === "await_deposit_id") {
-      const depositId = text;
-
-      if (!/^\d{7,10}$/.test(depositId)) {
-        return bot.sendMessage(
-          chatId,
-          "❌ *ID invalide.*\nEnvoie un numéro de dépôt de *7 à 10 chiffres* sans lettres.\n\n*Exemple :* `789456123`",
-          { parse_mode: "Markdown" }
-        );
-      }
-
-      // Vérifie doublon
-      const { rows } = await pool.query(
-        "SELECT 1 FROM pending_verifications WHERE deposit_id = $1",
-        [depositId]
-      );
-      if (rows.length > 0) {
-        return bot.sendMessage(
-          chatId,
-          "⚠️ *Cet ID de dépôt est déjà en cours de vérification.*\n\nSi tu penses qu'il y a une erreur, contacte *l’assistance*.",
-          { parse_mode: "Markdown" }
-        );
-      }
-
-      userStates[chatId].deposit_id = depositId;
-      userStates[chatId].step = "await_amount";
-
-      return bot.sendMessage(
-        chatId,
-        "💵 *Quel montant as-tu déposé ?*\n\n_Exemples :_ `25000 FCFA`, `25€`, `15000 Naira`",
-        { parse_mode: "Markdown" }
-      );
-    }
-
-    if (state.step === "await_amount") {
-      const amountMatch = text.match(/(\d+(?:[.,]\d+)?)/);
-      const amount = amountMatch
-        ? parseFloat(amountMatch[1].replace(",", "."))
-        : NaN;
-
-      if (isNaN(amount)) {
-        return bot.sendMessage(
-          chatId,
-          "❌ *Montant invalide.*\n\nEnvoie un chiffre valide, comme : `25000 FCFA`, `25€`, `15000`.",
-          { parse_mode: "Markdown" }
-        );
-      }
-
-      if (amount < 5) {
-        return bot.sendMessage(
-          chatId,
-          "⚠️ *Montant trop faible.*\n\nLe dépôt minimum accepté est *5 €*.",
-          { parse_mode: "Markdown" }
-        );
-      }
-
-      if (amount > 10000) {
-        return bot.sendMessage(
-          chatId,
-          "⚠️ *Montant trop élevé.*\n\nLe dépôt maximum accepté est *10 000 €*.",
-          { parse_mode: "Markdown" }
-        );
-      }
-
-      // Enregistre la demande
-      try {
-        await pool.query(
-          `INSERT INTO pending_verifications (telegram_id, bookmaker, deposit_id, amount)
-           VALUES ($1, $2, $3, $4)`,
-          [chatId, state.bookmaker, state.deposit_id, amount]
-        );
-
-        await bot.sendMessage(
-          chatId,
-          "✅ *Merci !*\n\nTes informations ont été enregistrées. Tu recevras une réponse après vérification. 🔎",
-          { parse_mode: "Markdown" }
-        );
-      } catch (err) {
-        console.error(err);
-        return bot.sendMessage(
-          chatId,
-          "❌ *Erreur lors de l'enregistrement.*\n\nRéessaie plus tard ou contacte l'assistance.",
-          { parse_mode: "Markdown" }
-        );
-      }
-
-      delete userStates[chatId];
-      return;
-    }
-  }
-});
-
-// --- Callback_query pour inline_keyboard ---
-bot.on("callback_query", async (query) => {
-  const msg = query.message;
-  const chatId = msg.chat.id;
-  const data = query.data;
-
-  // Répond à la requête callback pour éviter le chargement infini côté client
-  await bot.answerCallbackQuery(query.id);
-
-  // Choix bookmaker
-  if (data.startsWith("bookmaker_")) {
-    const bookmaker = data.replace("bookmaker_", "");
-    if (!userStates[chatId]) userStates[chatId] = {};
-    userStates[chatId].bookmaker = bookmaker;
-    userStates[chatId].step = "await_deposit_id";
-
-    return bot.sendMessage(chatId, "🆔 Quel est l'identifiant de ton compte ?");
-  }
 
   // Gestion menu assistance
   const assistanceTexts = {
@@ -759,7 +601,7 @@ bot.on("message", async (msg) => {
       );
 
       if (res.rows.length > 0) {
-        return bot.sendMessage(chatId, "🟢 Voici le pronostic du jour :\n\n🎯 🔥 ⚽️");
+        return bot.sendMessage(chatId, "🟢 Voici le pronostic du jour ");
       }
 
       userStates[chatId] = { step: "await_bookmaker" };
@@ -767,7 +609,7 @@ bot.on("message", async (msg) => {
 
       return bot.sendMessage(
         chatId,
-        "🔐 Pour accéder aux pronostics, quel bookmaker as-tu utilisé ?",
+        "🔐 Pour accéder aux pronostics, merci de compléter ces infos.\n\nQuel bookmaker as-tu utilisé ?",
         {
           reply_markup: {
             keyboard: [
