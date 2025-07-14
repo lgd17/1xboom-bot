@@ -1164,6 +1164,148 @@ bot.on("message", async (msg) => {
   }
 });
 
+//////////////////////////////////////////////////////// ENVI AUTOMATIQUE DES COUPON DU JOUR \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+// 🇹🇬 Heure Lomé (GMT+0) = 07h15
+schedule.scheduleJob("15 7 * * *", async () => {
+  try {
+    console.log("⏰ Tâche auto 7h15 → Génération du coupon du jour");
+
+    // Vérifier s'il existe déjà un prono manuel
+    const { rows } = await pool.query(`
+      SELECT * FROM daily_pronos 
+      WHERE date = CURRENT_DATE
+    `);
+
+    if (rows.length > 0) {
+      console.log("✅ Prono déjà inséré aujourd'hui. Aucun envoi automatique.");
+      return;
+    }
+
+    // Générer un coupon automatiquement
+    const coupon = await generateCoupon();
+
+    if (!coupon || !coupon.content) {
+      console.error("❌ Coupon généré invalide.");
+      return;
+    }
+
+    // Sauvegarde en base
+    await pool.query(
+      `INSERT INTO daily_pronos (content, media_url, media_type, source)
+       VALUES ($1, $2, $3, $4)`,
+      [coupon.content, coupon.media_url || null, coupon.media_type || null, coupon.source || "api"]
+    );
+
+    console.log("✅ Coupon auto inséré en base.");
+
+    // Récupérer tous les utilisateurs validés
+    const result = await pool.query("SELECT telegram_id FROM verified_users");
+    const users = result.rows;
+
+    for (const user of users) {
+      const chatId = user.telegram_id;
+
+      try {
+        // Envoi selon le type de média
+        if (coupon.media_type === "photo" && coupon.media_url) {
+          await bot.sendPhoto(chatId, coupon.media_url, {
+            caption: coupon.content,
+            parse_mode: "Markdown",
+          });
+        } else if (coupon.media_type === "video" && coupon.media_url) {
+          await bot.sendVideo(chatId, coupon.media_url, {
+            caption: coupon.content,
+            parse_mode: "Markdown",
+          });
+        } else {
+          await bot.sendMessage(chatId, coupon.content, {
+            parse_mode: "Markdown",
+          });
+        }
+
+        console.log(`📤 Coupon envoyé à ${chatId}`);
+      } catch (err) {
+        console.error(`❌ Erreur envoi coupon à ${chatId}`, err);
+      }
+    }
+
+  } catch (err) {
+    console.error("❌ Erreur dans la tâche automatique :", err);
+  }
+});
+
+/////////////////////////////////////////////////// test_auto \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_
+
+bot.onText(/\/test_auto/, async (msg) => {
+  const chatId = msg.chat.id;
+
+  // Optionnel : autoriser seulement les admins
+  if (!ADMIN_IDS.includes(chatId)) {
+    return bot.sendMessage(chatId, "⛔ Accès refusé.");
+  }
+
+  try {
+    bot.sendMessage(chatId, "⏳ Test en cours : génération + envoi automatique...");
+
+    const { rows } = await pool.query(`
+      SELECT * FROM daily_pronos WHERE date = CURRENT_DATE
+    `);
+
+    if (rows.length > 0) {
+      await bot.sendMessage(chatId, "✅ Un prono existe déjà aujourd'hui. Test annulé.");
+      return;
+    }
+
+    const coupon = await generateCoupon();
+
+    if (!coupon || !coupon.content) {
+      return bot.sendMessage(chatId, "❌ Erreur : coupon généré invalide.");
+    }
+
+    await pool.query(
+      `INSERT INTO daily_pronos (content, media_url, media_type, source)
+       VALUES ($1, $2, $3, $4)`,
+      [coupon.content, coupon.media_url || null, coupon.media_type || null, coupon.source || "api"]
+    );
+
+    const users = await pool.query("SELECT telegram_id FROM verified_users");
+
+    for (const user of users.rows) {
+      const userId = user.telegram_id;
+
+      try {
+        if (coupon.media_type === "photo" && coupon.media_url) {
+          await bot.sendPhoto(userId, coupon.media_url, {
+            caption: coupon.content,
+            parse_mode: "Markdown",
+          });
+        } else if (coupon.media_type === "video" && coupon.media_url) {
+          await bot.sendVideo(userId, coupon.media_url, {
+            caption: coupon.content,
+            parse_mode: "Markdown",
+          });
+        } else {
+          await bot.sendMessage(userId, coupon.content, {
+            parse_mode: "Markdown",
+          });
+        }
+
+        console.log(`✅ Envoyé à ${userId}`);
+      } catch (err) {
+        console.error(`❌ Erreur pour ${userId}`, err);
+      }
+    }
+
+    bot.sendMessage(chatId, "✅ Coupon envoyé à tous les utilisateurs validés.");
+
+  } catch (err) {
+    console.error("❌ Erreur dans le test :", err);
+    bot.sendMessage(chatId, "❌ Une erreur s’est produite pendant le test.");
+  }
+});
+
+
 
 
 // FONCTION ADMIN/AJOUTE-prono
