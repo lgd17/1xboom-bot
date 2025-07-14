@@ -1,6 +1,6 @@
 // ====== CHARGEMENT DES MODULES ======
 require("dotenv").config();
-require('./server');
+//require('./server');
 require('./dailyCouponRunner');
 const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
