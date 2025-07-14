@@ -1,6 +1,5 @@
 const schedule = require("node-schedule");
 const { pool } = require("./db");
-const { bot } = require("./bot"); // ou adapte selon ta structure
 const generateCoupon = require("./generateCoupon"); // doit retourner un objet { content, media_url, media_type }
 
 /////////////////////////////////////// ✅ GENRE LES COUPONS AUTOMATIQUES ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
