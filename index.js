@@ -200,13 +200,20 @@ async function sendMainMenu(chatId) {
   }
 }
 
-// --- Commande /start pour lancer le menu ---
+// --- /start pour afficher le menu ---
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   await sendMainMenu(chatId);
 });
 
-  // --- Parrainage ---
+// --- Gestion des messages texte ---
+bot.on("message", async (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text?.trim();
+
+  if (!text || text.startsWith("/")) return;
+
+  // Parrainage
   if (text === "🤝 Parrainage") {
     const botInfo = await bot.getMe();
     const referralLink = `https://t.me/${botInfo.username}?start=${chatId}`;
@@ -233,29 +240,27 @@ bot.onText(/\/start/, async (msg) => {
     return bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
   }
 
-  // --- Mes Points ---
- if (text === '🏆 Mes Points') {
-  try {
-    const res = await pool.query('SELECT points FROM users WHERE telegram_id = $1', [chatId]);
-    let points = 0;
-    if (res.rows && res.rows.length > 0 && res.rows[0].points) {
-      points = res.rows[0].points;
+  // Mes Points
+  if (text === "🏆 Mes Points") {
+    try {
+      const res = await pool.query('SELECT points FROM users WHERE telegram_id = $1', [chatId]);
+      let points = 0;
+      if (res.rows.length > 0 && res.rows[0].points) points = res.rows[0].points;
+
+      let motivation = '';
+      if (points >= 100) motivation = "🚀 *Incroyable ! Tu es dans la cour des grands.*";
+      else if (points >= 50) motivation = "🔥 *Très bon score !* Continue !";
+      else if (points >= 20) motivation = "👍 *Bien joué !* Tu montes dans le classement.";
+      else motivation = "💡 Gagne des points en parrainant. Clique sur '🤝 Parrainage'";
+
+      return bot.sendMessage(chatId, `⭐️ *Tes points :* ${points} points\n\n${motivation}`, { parse_mode: "Markdown" });
+    } catch (err) {
+      console.error(err);
+      return bot.sendMessage(chatId, "❌ Erreur lors de la récupération des points.");
     }
-
-    let motivation = '';
-    if (points >= 100) motivation = "🚀 *Incroyable ! Tu es dans la cour des grands.*";
-    else if (points >= 50) motivation = "🔥 *Très bon score !* Continue !";
-    else if (points >= 20) motivation = "👍 *Bien joué !* Tu montes dans le classement.";
-    else motivation = "💡 Gagne des points en parrainant. Clique sur '🤝 Parrainage'";
-
-    return bot.sendMessage(chatId, `⭐️ *Tes points :* ${points} points\n\n${motivation}`, { parse_mode: 'Markdown' });
-  } catch (err) {
-    console.error(err);
-    return bot.sendMessage(chatId, "❌ Erreur lors de la récupération des points.");
   }
-}
 
-  // --- Assistance ---
+  // Assistance
   if (text === "🆘 Assistance 🤖") {
     return bot.sendMessage(chatId, "🤖 Choisis une option :", {
       reply_markup: {
@@ -269,8 +274,16 @@ bot.onText(/\/start/, async (msg) => {
     });
   }
 
+  // Autres messages ignorés ou gérés ailleurs
+});
 
-  // Gestion menu assistance
+// --- Gestion des callbacks inline (boutons assistance) ---
+bot.on("callback_query", async (query) => {
+  const chatId = query.message.chat.id;
+  const data = query.data;
+
+  await bot.answerCallbackQuery(query.id);
+
   const assistanceTexts = {
     pronostics: `🎯 *Pronostics du jour*\n\nTu veux accéder à nos *coupons exclusifs du jour* ? Voici comment faire 👇
 
@@ -305,38 +318,6 @@ Pose ta question à tout moment. On te répondra vite 💙`,
     });
   }
 
-  if (data === "points") {
-    try {
-      const res = await pool.query(
-        "SELECT points FROM users WHERE telegram_id = $1",
-        [chatId]
-      );
-      const points = res?.rows?.[0]?.points || 0;
-
-      let motivation = "";
-      if (points >= 100)
-        motivation = "🚀 *Incroyable ! Tu es dans la cour des grands.*";
-      else if (points >= 50) motivation = "🔥 *Très bon score !* Continue !";
-      else if (points >= 20)
-        motivation = "👍 *Bien joué !* Tu montes dans le classement.";
-      else
-        motivation =
-          "💡 Gagne des points en parrainant. Clique sur '🤝 Parrainage'";
-
-      return bot.sendMessage(
-        chatId,
-        `⭐️ *Tes points :* ${points} points\n\n${motivation}`,
-        { parse_mode: "Markdown" }
-      );
-    } catch (err) {
-      console.error(err);
-      return bot.sendMessage(
-        chatId,
-        "❌ Erreur lors de la récupération des points."
-      );
-    }
-  }
-
   if (data === "menu_assistance") {
     return bot.sendMessage(chatId, "🤖 Choisis une option :", {
       reply_markup: {
@@ -354,7 +335,7 @@ Pose ta question à tout moment. On te répondra vite 💙`,
   console.warn("⚠️ Option inconnue callback_query:", data);
 });
 
-// --- Optionnel: gestion erreurs globales ---
+// --- Gestion erreurs globales ---
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection:", reason);
 });
