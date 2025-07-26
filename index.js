@@ -679,6 +679,116 @@ bot.on("message", async (msg) => {
       
 
 /////////////////////////////////////// ✅ VOIRE LES VÉRIFICATIONS EN ATTENTE ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+bot.onText(/\/admin/, async (msg) => {
+  const chatId = msg.chat.id;
+  if (chatId.toString() !== ADMIN_ID) return;
+
+  const { rows } = await pool.query("SELECT * FROM users WHERE status = 'pending'");
+  if (!rows.length) {
+    return bot.sendMessage(chatId, "✅ Aucun utilisateur en attente.");
+  }
+
+  for (const user of rows) {
+    const userInfo = `👤 Nom: ${user.username || "Inconnu"}\n💰 Montant: ${user.amount} FCFA\n🏦 Bookmaker: ${user.bookmaker}\n🆔 ID: ${user.user_id}`;
+
+    await bot.sendMessage(chatId, `📝 Demande en attente:\n${userInfo}`, {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Valider", callback_data: `validate_${user.user_id}` },
+            { text: "❌ Rejeter", callback_data: `reject_${user.user_id}` }
+          ]
+        ]
+      }
+    });
+  }
+});
+
+bot.on("callback_query", async (query) => {
+  const [action, userId] = query.data.split("_");
+  const adminChatId = query.message.chat.id;
+
+  if (action === "validate") {
+    await pool.query("UPDATE users SET status = 'verified' WHERE user_id = $1", [userId]);
+
+    bot.sendMessage(userId, "✅ Félicitations ! Tu as été validé. Tu peux maintenant accéder aux pronostics.", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "🎯 Pronostic du jour", callback_data: "get_prono" }]
+        ]
+      }
+    });
+
+    return bot.editMessageText("✅ Utilisateur validé avec succès.", {
+      chat_id: adminChatId,
+      message_id: query.message.message_id
+    });
+  }
+
+  if (action === "reject") {
+    return bot.editMessageText("❌ Choisis la raison du rejet :", {
+      chat_id: adminChatId,
+      message_id: query.message.message_id,
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Dépôt insuffisant", callback_data: `rej_cause_depot_${userId}` }],
+          [{ text: "Non lié au code promo P999X", callback_data: `rej_cause_code_${userId}` }],
+          [{ text: "Sans raison", callback_data: `rej_cause_autre_${userId}` }]
+        ]
+      }
+    });
+  }
+
+  if (action === "rej") {
+    const cause = query.data.split("_")[2];
+    const id = query.data.split("_")[3];
+    await pool.query("UPDATE users SET status = 'rejected' WHERE user_id = $1", [id]);
+
+    let reasonText = "";
+    if (cause === "depot") reasonText = "❌ Rejeté : Dépôt insuffisant.";
+    else if (cause === "code") reasonText = "❌ Rejeté : Compte non lié au code promo P999X.";
+    else reasonText = "❌ Rejeté sans motif spécifique.";
+
+    await bot.sendMessage(id, `${reasonText}`, {
+      reply_markup: {
+        keyboard: [
+          ["🔁 Recommencer"],
+          ["🆘 Contacter l'assistance"]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      }
+    });
+
+    return bot.editMessageText(`🔴 Rejeté : ${reasonText}`, {
+      chat_id: adminChatId,
+      message_id: query.message.message_id
+    });
+  }
+
+  if (query.data === "get_prono") {
+    const userId = query.from.id;
+
+    // Désactive le bouton après clic
+    bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+      chat_id: userId,
+      message_id: query.message.message_id
+    });
+
+    const prono = await coupon.getTodayCoupon(); // Ton fichier getCouponDuJour.js
+    await bot.sendMessage(userId, `🎯 Pronostic du jour :\n\n${prono}`, {
+      reply_markup: {
+        keyboard: [
+          ["🏆 Mes Points"],
+          ["🤝 Parrainage", "🆘 Assistance 🤖"]
+        ],
+        resize_keyboard: true
+      }
+    });
+  }
+});
+
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text?.trim().toLowerCase();
