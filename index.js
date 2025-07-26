@@ -570,7 +570,6 @@ async function envoyerMessageComplet(bot, chatId, message) {
 //=========================== VÉRIFICATION_USER-INSCRIT
 // === Gestion Pronostic du jour propre (avec userStates) ===
 
-const userStates = {};
 const timeoutMap = {};
 const validBookmakers = ["1xbet", "888starz", "melbet", "winwin"];
 
