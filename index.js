@@ -679,9 +679,6 @@ bot.on("message", async (msg) => {
       
 
 /////////////////////////////////////// ✅ VOIRE LES VÉRIFICATIONS EN ATTENTE ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-//=== COMMANDE /admin ====
-
-// Message handler pour relance après rejet
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text?.trim().toLowerCase();
@@ -708,10 +705,7 @@ bot.on("message", async (msg) => {
     );
   }
 
-  // ... ici tu peux ajouter d'autres gestionnaires de message
-});
-
-  // 🆘 Assistance
+  // 🆘 Assistance (commande texte)
   if (text === "🆘 contacter l'assistance") {
     return bot.sendMessage(
       chatId,
@@ -719,6 +713,9 @@ bot.on("message", async (msg) => {
       { parse_mode: "Markdown", disable_web_page_preview: true }
     );
   }
+
+  // ... autres gestionnaires possibles ici
+});
 
 
 //////////////////////////////////////////////////////// ENVI AUTOMATIQUE DES COUPON DU JOUR \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
