@@ -765,6 +765,7 @@ bot.onText(/\/admin/, async (msg) => {
         resize_keyboard: true,
         one_time_keyboard: true
       }
+  }); 
       return bot.sendMessage(chatId, `🚫 Rejet envoyé à l'utilisateur.`);
     }
 
