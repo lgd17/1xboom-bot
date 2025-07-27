@@ -679,123 +679,112 @@ bot.on("message", async (msg) => {
       
 
 /////////////////////////////////////// ✅ VOIRE LES VÉRIFICATIONS EN ATTENTE ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+// Commande admin
+bot.onText(/^\/admin$/, async (msg) => {
+  if (msg.from.id !== ADMIN_ID) return;
 
-bot.onText(/\/admin/, async (msg) => {
-  const chatId = msg.chat.id;
-  if (chatId.toString() !== ADMIN_ID) return;
+  const res = await pool.query(
+    "SELECT * FROM pending_users ORDER BY submitted_at ASC LIMIT 1"
+  );
 
-  const { rows } = await pool.query("SELECT * FROM users WHERE status = 'pending'");
-  if (!rows.length) {
-    return bot.sendMessage(chatId, "✅ Aucun utilisateur en attente.");
+  if (res.rowCount === 0) {
+    return bot.sendMessage(msg.chat.id, "✅ Aucun utilisateur en attente de validation.");
   }
 
-  for (const user of rows) {
-    const userInfo = `👤 Nom: ${user.username || "Inconnu"}\n💰 Montant: ${user.amount} FCFA\n🏦 Bookmaker: ${user.bookmaker}\n🆔 ID: ${user.user_id}`;
+  const user = res.rows[0];
 
-    await bot.sendMessage(chatId, `📝 Demande en attente:\n${userInfo}`, {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "✅ Valider", callback_data: `validate_${user.user_id}` },
-            { text: "❌ Rejeter", callback_data: `reject_${user.user_id}` }
-          ]
+  const info = `👤 *Utilisateur en attente*\n\n` +
+    `🔹 Bookmaker : ${user.bookmaker}\n` +
+    `🔹 Identifiant : ${user.user_id}\n` +
+    `🔹 Montant : ${user.amount}\n\n` +
+    `🆔 Telegram : [${user.username || "inconnu"}](tg://user?id=${user.telegram_id})`;
+
+  return bot.sendMessage(msg.chat.id, info, {
+    parse_mode: "Markdown",
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "✅ Valider", callback_data: `valider_${user.telegram_id}` },
+          { text: "❌ Rejeter", callback_data: `rejeter_${user.telegram_id}` }
         ]
-      }
-    });
-  }
+      ]
+    }
+  });
 });
 
-bot.on("callback_query", async (query) => {
-  const [action, userId] = query.data.split("_");
-  const adminChatId = query.message.chat.id;
+// Callback : Valider ou Rejeter
+bot.on('callback_query', async (query) => {
+  const chatId = query.message.chat.id;
+  const data = query.data;
 
-  if (action === "validate") {
-    await pool.query("UPDATE users SET status = 'verified' WHERE user_id = $1", [userId]);
+  if (data.startsWith("valider_")) {
+    const userId = data.split("_")[1];
 
-    bot.sendMessage(userId, "✅ Félicitations ! Tu as été validé. Tu peux maintenant accéder aux pronostics.", {
+    await pool.query("INSERT INTO verified_users (telegram_id) VALUES ($1) ON CONFLICT DO NOTHING", [userId]);
+    await pool.query("DELETE FROM pending_users WHERE telegram_id = $1", [userId]);
+
+    await bot.sendMessage(userId, `✅ Ton compte a été validé avec succès !`, {
       reply_markup: {
-        inline_keyboard: [
-          [{ text: "🎯 Pronostic du jour", callback_data: "get_prono" }]
-        ]
-      }
-    });
-
-    return bot.editMessageText("✅ Utilisateur validé avec succès.", {
-      chat_id: adminChatId,
-      message_id: query.message.message_id
-    });
-  }
-
-  if (action === "reject") {
-    return bot.editMessageText("❌ Choisis la raison du rejet :", {
-      chat_id: adminChatId,
-      message_id: query.message.message_id,
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "Dépôt insuffisant", callback_data: `rej_cause_depot_${userId}` }],
-          [{ text: "Non lié au code promo P999X", callback_data: `rej_cause_code_${userId}` }],
-          [{ text: "Sans raison", callback_data: `rej_cause_autre_${userId}` }]
-        ]
-      }
-    });
-  }
-
-  if (action === "rej") {
-    const cause = query.data.split("_")[2];
-    const id = query.data.split("_")[3];
-    await pool.query("UPDATE users SET status = 'rejected' WHERE user_id = $1", [id]);
-
-    let reasonText = "";
-    if (cause === "depot") reasonText = "❌ Rejeté : Dépôt insuffisant.";
-    else if (cause === "code") reasonText = "❌ Rejeté : Compte non lié au code promo P999X.";
-    else reasonText = "❌ Rejeté sans motif spécifique.";
-
-    await bot.sendMessage(id, `${reasonText}`, {
-      reply_markup: {
-        keyboard: [
-          ["🔁 Recommencer"],
-          ["🆘 Contacter l'assistance"]
-        ],
+        keyboard: [["🎯 Pronostics du jour"]],
         resize_keyboard: true,
         one_time_keyboard: true
       }
     });
 
-    return bot.editMessageText(`🔴 Rejeté : ${reasonText}`, {
-      chat_id: adminChatId,
-      message_id: query.message.message_id
-    });
+    return bot.sendMessage(chatId, "👍 Utilisateur validé.");
   }
 
-  if (query.data === "get_prono") {
-    const userId = query.from.id;
+  if (data.startsWith("rejeter_")) {
+    const userId = data.split("_")[1];
 
-    // Désactive le bouton après clic
-    bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
-      chat_id: userId,
-      message_id: query.message.message_id
-    });
-
-    const prono = await coupon.getTodayCoupon(); // Ton fichier getCouponDuJour.js
-    await bot.sendMessage(userId, `🎯 Pronostic du jour :\n\n${prono}`, {
+    return bot.sendMessage(chatId, "❌ Motif du rejet ?", {
       reply_markup: {
-        keyboard: [
-          ["🏆 Mes Points"],
-          ["🤝 Parrainage", "🆘 Assistance 🤖"]
-        ],
-        resize_keyboard: true
+        inline_keyboard: [
+          [{ text: "📉 Dépôt insuffisant", callback_data: `motif1_${userId}` }],
+          [{ text: "❌ Code promo manquant", callback_data: `motif2_${userId}` }],
+          [{ text: "📝 Autre (sans raison)", callback_data: `motif3_${userId}` }]
+        ]
       }
     });
   }
+
+  // Motifs de rejet
+  if (data.startsWith("motif")) {
+    const [motif, userId] = data.split("_");
+
+    let message = "";
+    switch (motif) {
+      case "motif1":
+        message = "❌ Ton compte a été rejeté : dépôt insuffisant.";
+        break;
+      case "motif2":
+        message = "❌ Ton compte a été rejeté : code promo P999X non utilisé.";
+        break;
+      case "motif3":
+        message = "❌ Ton compte a été rejeté pour une autre raison.";
+        break;
+    }
+
+    await bot.sendMessage(userId, `${message}\n\n🔁 Tu peux recommencer la procédure ou contacter l’assistance.`, {
+      reply_markup: {
+        keyboard: [["🔁 recommencer"], ["🆘 contacter l'assistance"]],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      }
+    });
+
+    await pool.query("DELETE FROM pending_users WHERE telegram_id = $1", [userId]);
+    return bot.sendMessage(chatId, "ℹ️ Utilisateur informé du rejet.");
+  }
 });
 
+// 🔁 Recommencer (relance procédure)
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
-  const text = msg.text?.trim().toLowerCase();
+  const text = msg.text?.trim();
 
   if (!text || text.startsWith("/")) return;
 
-  // 🔁 Relance après rejet
   if (text === "🔁 recommencer") {
     userStates[chatId] = { step: "await_bookmaker" };
 
@@ -806,27 +795,41 @@ bot.on("message", async (msg) => {
         reply_markup: {
           keyboard: [
             ["1xbet", "888starz"],
-            ["melbet", "winwin"],
+            ["melbet", "winwin"]
           ],
           resize_keyboard: true,
-          one_time_keyboard: true,
-        },
+          one_time_keyboard: true
+        }
       }
     );
   }
 
-  // 🆘 Assistance (commande texte)
+  // 🆘 Assistance bouton texte
   if (text === "🆘 contacter l'assistance") {
     return bot.sendMessage(
       chatId,
-      "📩 Contacte notre équipe ici : [@Support_1XBOOM](https://t.me/Support_1XBOOM)",
+      "📩 Contacte notre équipe ici : [@Support_1XBOOM](https://t.me/Catkatii)",
       { parse_mode: "Markdown", disable_web_page_preview: true }
     );
   }
 
-  // ... autres gestionnaires possibles ici
-});
+  // 🎯 Pronostic du jour
+  if (text === "🎯 Pronostic du jour") {
+    await bot.sendMessage(chatId, "🎯 Voici ton pronostic du jour :\n\n👉 *[Coupon à insérer]*", {
+      parse_mode: "Markdown"
+    });
 
+    return bot.sendMessage(chatId, "📋 Menu principal :", {
+      reply_markup: {
+        keyboard: [
+          ["🏆 Mes Points", "🤝 Parrainage"],
+          ["🆘 Assistance "]
+        ],
+        resize_keyboard: true
+      }
+    });
+  }
+});
 
 //////////////////////////////////////////////////////// ENVI AUTOMATIQUE DES COUPON DU JOUR \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
