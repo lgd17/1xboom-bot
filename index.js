@@ -679,104 +679,115 @@ bot.on("message", async (msg) => {
       
 
 /////////////////////////////////////// ✅ VOIRE LES VÉRIFICATIONS EN ATTENTE ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-// Commande admin
-bot.onText(/^\/admin$/, async (msg) => {
-  if (msg.from.id !== ADMIN_ID) return;
+// === COMMANDES ===
+bot.onText(/\/admin/, async (msg) => {
+  if (!ADMIN_IDS.includes(msg.from.id)) return;
 
-  const res = await pool.query(
-    "SELECT * FROM pending_verifications ORDER BY submitted_at ASC LIMIT 1"
-  );
+  try {
+    const { rows } = await pool.query("SELECT * FROM pending_verifications");
+    if (rows.length === 0) return bot.sendMessage(msg.chat.id, "✅ Aucune vérification en attente.");
 
-  if (res.rowCount === 0) {
-    return bot.sendMessage(msg.chat.id, "✅ Aucun utilisateur en attente de validation.");
-  }
+    for (const row of rows) {
+      const text = `🧾 <b>Nouvelle demande</b>\n👤 @${row.username} (ID: ${row.telegram_id})\n📱 Bookmaker: ${row.bookmaker}\n💰 Montant: ${row.amount} FCFA\n🆔 Dépôt: <code>${row.deposit_id}</code>`;
 
-  const user = res.rows[0];
+      const opts = {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "✅ Valider", callback_data: `validate_${row.telegram_id}` },
+              { text: "❌ Rejeter", callback_data: `reject_${row.telegram_id}` }
+            ]
+          ]
+        }
+      };
 
-  const info = `👤 *Utilisateur en attente*\n\n` +
-    `🔹 Bookmaker : ${user.bookmaker}\n` +
-    `🔹 Identifiant : ${user.user_id}\n` +
-    `🔹 Montant : ${user.amount}\n\n` +
-    `🆔 Telegram : [${user.username || "inconnu"}](tg://user?id=${user.telegram_id})`;
-
-  return bot.sendMessage(msg.chat.id, info, {
-    parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: "✅ Valider", callback_data: `valider_${user.telegram_id}` },
-          { text: "❌ Rejeter", callback_data: `rejeter_${user.telegram_id}` }
-        ]
-      ]
+      await bot.sendMessage(msg.chat.id, text, opts);
     }
-  });
-});
-
-// Callback : Valider ou Rejeter
-bot.on('callback_query', async (query) => {
+  } catch (err) {
+    console.error("Erreur lors de l'affichage des vérifs:", err);
+  }
+});bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
-  const data = query.data;
+  const adminId = query.from.id;
 
-  if (data.startsWith("valider_")) {
-    const userId = data.split("_")[1];
+  if (!ADMIN_IDS.includes(adminId)) return;
 
-    await pool.query("INSERT INTO verified_verificationn (telegram_id) VALUES ($1) ON CONFLICT DO NOTHING", [userId]);
-    await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [userId]);
+  const [action, telegramId, motif] = query.data.split("_");
 
-    await bot.sendMessage(userId, `✅ Ton compte a été validé avec succès !`, {
+  if (action === "validate") {
+    try {
+      const { rows } = await pool.query("SELECT * FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
+      if (rows.length === 0) return;
+      const user = rows[0];
+
+      // Ajout à verified_users
+      await pool.query("INSERT INTO verified_users (telegram_id, username, bookmaker, deposit_id, amount) VALUES ($1,$2,$3,$4,$5)", [user.telegram_id, user.username, user.bookmaker, user.deposit_id, user.amount]);
+
+      // Suppression de la table d’attente
+      await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
+
+      await bot.sendMessage(user.telegram_id, `✅ Ton compte a été validé avec succès !`, {
       reply_markup: {
         keyboard: [["🎯 Pronostics du jour"]],
         resize_keyboard: true,
         one_time_keyboard: true
       }
     });
-
-    return bot.sendMessage(chatId, "👍 Utilisateur validé.");
-  }
-
-  if (data.startsWith("rejeter_")) {
-    const userId = data.split("_")[1];
-
-    return bot.sendMessage(chatId, "❌ Motif du rejet ?", {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "📉 Dépôt insuffisant", callback_data: `motif1_${userId}` }],
-          [{ text: "❌ Code promo manquant", callback_data: `motif2_${userId}` }],
-          [{ text: "📝 Autre (sans raison)", callback_data: `motif3_${userId}` }]
-        ]
-      }
-    });
-  }
-
-  // Motifs de rejet
-  if (data.startsWith("motif")) {
-    const [motif, userId] = data.split("_");
-
-    let message = "";
-    switch (motif) {
-      case "motif1":
-        message = "❌ Ton compte a été rejeté : dépôt insuffisant.";
-        break;
-      case "motif2":
-        message = "❌ Ton compte a été rejeté : code promo P999X non utilisé.";
-        break;
-      case "motif3":
-        message = "❌ Ton compte a été rejeté pour une autre raison.";
-        break;
+      await bot.sendMessage(chatId, `✅ Validation de @${user.username} confirmée.`);
+    } catch (err) {
+      console.error("Erreur de validation:", err);
     }
+  }
 
-    await bot.sendMessage(userId, `${message}\n\n🔁 Tu peux recommencer la procédure ou contacter l’assistance.`, {
+
+ if (action === "reject") {
+    const motifs = [
+      [{ text: "🔻 Dépôt insuffisant", callback_data: `motif1_${telegramId}` }],
+      [{ text: "⛔️ ID non lié au code P999X", callback_data: `motif2_${telegramId}` }],
+      [{ text: "📝 Autres raisons", callback_data: `motif3_${telegramId}` }]
+    ];
+    return bot.editMessageReplyMarkup({ inline_keyboard: motifs }, { chat_id: chatId, message_id: query.message.message_id });
+  }
+
+  if (action.startsWith("motif")) {
+    const motifText = {
+      motif1: "❌ Rejeté : dépôt insuffisant.",
+      motif2: "❌ Rejeté : cet ID de dépôt n’est pas lié au code promo P999X."
+    }[action];
+
+    if (motifText) {
+      await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
+      await bot.sendMessage(telegramId, motifText);
+      await bot.sendMessage(telegramId, `${message}\n\n🔁 Tu peux recommencer la procédure.`, {
       reply_markup: {
-        keyboard: [["🔁 recommencer"], ["🆘 contacter l'assistance"]],
+        keyboard: [["🔁 recommencer"]],
         resize_keyboard: true,
         one_time_keyboard: true
       }
-    });
+      return bot.sendMessage(chatId, `🚫 Rejet envoyé à l'utilisateur.`);
+    }
 
-    await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [userId]);
-    return bot.sendMessage(chatId, "ℹ️ Utilisateur informé du rejet.");
+    if (action === "motif3") {
+      bot.sendMessage(chatId, "✍️ Envoie manuellement le motif de rejet pour l’utilisateur.");
+      bot.once("message", async (msg) => {
+        const motifPerso = msg.text;
+        await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
+        await bot.sendMessage(telegramId, `❌ Rejeté : ${motifPerso}`);
+        await bot.sendMessage(telegramId, `${message}\n\n🔁 Tu peux recommencer la procédure ou contacter l’assistance.`, {
+      reply_markup: {
+        keyboard: [["🆘 contacter l'assistance"]],
+        resize_keyboard: true,
+        one_time_keyboard: true
+      }
+        await bot.sendMessage(chatId, `🔔 Motif personnalisé envoyé à l’utilisateur.`);
+      });
+    }
   }
 });
+
+    
+ 
 
 // 🔁 Recommencer (relance procédure)
 bot.on("message", async (msg) => {
