@@ -684,7 +684,7 @@ bot.onText(/^\/admin$/, async (msg) => {
   if (msg.from.id !== ADMIN_ID) return;
 
   const res = await pool.query(
-    "SELECT * FROM pending_users ORDER BY submitted_at ASC LIMIT 1"
+    "SELECT * FROM pending_verifications ORDER BY submitted_at ASC LIMIT 1"
   );
 
   if (res.rowCount === 0) {
@@ -720,8 +720,8 @@ bot.on('callback_query', async (query) => {
   if (data.startsWith("valider_")) {
     const userId = data.split("_")[1];
 
-    await pool.query("INSERT INTO verified_users (telegram_id) VALUES ($1) ON CONFLICT DO NOTHING", [userId]);
-    await pool.query("DELETE FROM pending_users WHERE telegram_id = $1", [userId]);
+    await pool.query("INSERT INTO verified_verificationn (telegram_id) VALUES ($1) ON CONFLICT DO NOTHING", [userId]);
+    await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [userId]);
 
     await bot.sendMessage(userId, `✅ Ton compte a été validé avec succès !`, {
       reply_markup: {
@@ -773,7 +773,7 @@ bot.on('callback_query', async (query) => {
       }
     });
 
-    await pool.query("DELETE FROM pending_users WHERE telegram_id = $1", [userId]);
+    await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [userId]);
     return bot.sendMessage(chatId, "ℹ️ Utilisateur informé du rejet.");
   }
 });
