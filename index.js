@@ -769,23 +769,35 @@ bot.onText(/\/admin/, async (msg) => {
       return bot.sendMessage(chatId, `🚫 Rejet envoyé à l'utilisateur.`);
     }
 
-    if (action === "motif3") {
-      bot.sendMessage(chatId, "✍️ Envoie manuellement le motif de rejet pour l’utilisateur.");
-      bot.once("message", async (msg) => {
-        const motifPerso = msg.text;
-        await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
-        await bot.sendMessage(telegramId, `❌ Rejeté : ${motifPerso}`);
-        await bot.sendMessage(telegramId, `${message}\n\n🔁 Tu peux recommencer la procédure ou contacter l’assistance.`, {
-      reply_markup: {
-        keyboard: [["🆘 contacter l'assistance"]],
-        resize_keyboard: true,
-        one_time_keyboard: true
-      }
-        await bot.sendMessage(chatId, `🔔 Motif personnalisé envoyé à l’utilisateur.`);
-      });
+ if (action === "motif3") {
+  bot.sendMessage(chatId, "✍️ Envoie manuellement le motif de rejet pour l’utilisateur.");
+  
+  bot.once("message", async (msg) => {
+    const motifPerso = msg.text;
+
+    try {
+      await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
+
+      await bot.sendMessage(telegramId, `❌ Rejeté : ${motifPerso}`);
+      await bot.sendMessage(
+        telegramId,
+        `${message}\n\n🔁 Tu peux recommencer la procédure ou contacter l’assistance.`,
+        {
+          reply_markup: {
+            keyboard: [["🔁 recommencer", "🆘 contacter l'assistance"]],
+            resize_keyboard: true,
+            one_time_keyboard: true,
+          },
+        }
+      );
+
+      await bot.sendMessage(chatId, `🔔 Motif personnalisé envoyé à l’utilisateur.`);
+    } catch (err) {
+      console.error("Erreur lors de l'envoi du motif personnalisé :", err);
+      await bot.sendMessage(chatId, "❌ Une erreur est survenue lors de l’envoi du motif.");
     }
-  }
-});
+  });
+}
 
     
  
