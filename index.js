@@ -737,21 +737,22 @@ bot.on("callback_query", async (query) => {
         user.amount
       ]);
 
-      await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
+     await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
 
-      await bot.sendMessage(user.telegram_id, `✅ Ton compte a été validé avec succès !`, {
-        reply_markup: {
-          keyboard: [["🎯 Pronostics du jour"]],
-          resize_keyboard: true,
-          one_time_keyboard: true
-        }
-      });
+await bot.sendMessage(user.telegram_id, `✅ Ton compte a été validé avec succès !`, {
+  reply_markup: {
+    keyboard: [["🎯 Pronostics du jour"]],
+    resize_keyboard: true,
+    one_time_keyboard: true
+  }
+});
 
-      await bot.sendMessage(chatId, `✅ Validation de @${user.username} confirmée.`);
-    } catch (err) {
+await bot.sendMessage(chatId, `✅ Validation de @${user.username} confirmée.`);
+} catch (err) {
       console.error("Erreur de validation:", err);
     }
   }
+
 
   if (data.startsWith("reject_")) {
     const telegramId = data.split("_")[1];
@@ -823,18 +824,51 @@ bot.on("message", async (msg) => {
     });
   }
 
-  if (text === "🎯 Pronostic du jour") {
-    await bot.sendMessage(chatId, "🎯 Voici ton pronostic du jour :\n\n👉 *[Coupon à insérer]*", {
-      parse_mode: "Markdown"
-    });
 
-    return bot.sendMessage(chatId, "📋 Menu principal :", {
-      reply_markup: {
-        keyboard: [["🏆 Mes Points", "🤝 Parrainage"], ["🆘 Assistance"]],
-        resize_keyboard: true
+
+bot.on("callback_query", async (query) => {
+  const chatId = query.message.chat.id;
+  const messageId = query.message.message_id;
+
+  if (query.data === "get_prono") {
+    try {
+      // Supprime le bouton inline après clic
+      await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId });
+
+      // Récupère la date du jour au format YYYY-MM-DD
+      const today = new Date().toISOString().slice(0, 10);
+
+      // Recherche le coupon du jour
+      const res = await pool.query(
+        "SELECT content FROM daily_pronos WHERE date = $1 LIMIT 1",
+        [today]
+      );
+
+      if (res.rows.length === 0) {
+        await bot.sendMessage(chatId, "⚠️ Le pronostic du jour n'est pas encore disponible.");
+      } else {
+        const coupon = res.rows[0].content;
+
+        // Envoie le coupon du jour
+        await bot.sendMessage(chatId, `🎯 Pronostic du jour :\n\n${coupon}`, {
+          parse_mode: "Markdown"
+        });
+
+        // Affiche le menu principal avec 3 boutons
+        await bot.sendMessage(chatId, "📋 Menu principal :", {
+          reply_markup: {
+            keyboard: [["🏆 Mes Points", "🤝 Parrainage"], ["🆘 Assistance"]
+            ],
+            resize_keyboard: true
+          }
+        });
       }
-    });
+    } catch (error) {
+      console.error("Erreur lors de l'envoi du pronostic :", error);
+      await bot.sendMessage(chatId, "❌ Une erreur est survenue, réessaie plus tard.");
+    }
   }
+});
 
   // Gestion du motif personnalisé
   const pendingId = pendingCustomRejects[chatId];
