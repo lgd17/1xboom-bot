@@ -181,7 +181,6 @@ async function sendMainMenu(chatId) {
       : [["🎯 Pronostics du jour"]];
 
     const message = isVerified
-      ? "👋 Bienvenue sur *1XBOOM* !\n\nChoisis une option ci-dessous 👇"
       : "👋 Bienvenue sur *1XBOOM* !\n\nClique sur le bouton 🎯 Pronostics du jour pour accéder aux pronostics.";
 
     const menu = {
