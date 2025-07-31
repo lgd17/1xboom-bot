@@ -163,8 +163,7 @@ async function isUserInChannel(userId, channelUsername) {
   }
 }
 
-// --- Fonction pour envoyer le menu adapté ---
-async function sendMainMenu(chatId) {
+//async function sendMainMenu(chatId) {
   try {
     const res = await pool.query(
       "SELECT * FROM verified_users WHERE telegram_id = $1",
@@ -181,6 +180,7 @@ async function sendMainMenu(chatId) {
       : [["🎯 Pronostics du jour"]];
 
     const message = isVerified
+      ? "Bienvenue sur *1XBOOM* ! "
       : "👋 Bienvenue sur *1XBOOM* !\n\nClique sur le bouton 🎯 Pronostics du jour pour accéder aux pronostics.";
 
     const menu = {
@@ -572,12 +572,15 @@ async function envoyerMessageComplet(bot, chatId, message) {
 const timeoutMap = {};
 const validBookmakers = ["1xbet", "888starz", "melbet", "winwin"];
 
-// ✅ Fonction d’expiration
+// ✅ Fonction d’expiration avec Markdown
 function startTimeout(chatId, bot) {
   clearTimeout(timeoutMap[chatId]);
+
   timeoutMap[chatId] = setTimeout(() => {
     delete userStates[chatId];
-    bot.sendMessage(chatId, "⏰ Temps écoulé. Tu dois recommencer.", {
+
+    bot.sendMessage(chatId, "⏰ *Temps écoulé.* Tu dois recommencer.", {
+      parse_mode: "Markdown",
       reply_markup: {
         keyboard: [["🎯 Pronostics du jour"]],
         resize_keyboard: true,
@@ -586,6 +589,7 @@ function startTimeout(chatId, bot) {
     });
   }, 5 * 60 * 1000); // 5 minutes
 }
+
 
 // ✅ Gestion du bouton "🎯 Pronostics du jour"
 bot.on("message", async (msg) => {
@@ -597,24 +601,63 @@ bot.on("message", async (msg) => {
   const state = userStates[chatId];
 
   // ✅ Vérifie si l’utilisateur est déjà validé
-  if (text === "🎯 Pronostics du jour" && !state) {
+if (text === "🎯 Pronostics du jour") {
     const res = await pool.query("SELECT * FROM verified_users WHERE telegram_id = $1", [chatId]);
-    if (res.rows.length > 0) {
-      return bot.sendMessage(chatId, "✅ Tu es déjà validé. Voici ton pronostic du jour :\n\n👉 [TON PRONOSTIC]");
+    if (res.rows.length === 0) {
+      return bot.sendMessage(chatId, "❌ Tu n'es pas encore validé.");
     }
 
-    userStates[chatId] = { step: "await_bookmaker" };
-    startTimeout(chatId, bot);
-    return bot.sendMessage(chatId, "🔐 Pour accéder aux pronostics, indique ton bookmaker :", {
+    const accessRes = await pool.query("SELECT * FROM daily_access WHERE telegram_id = $1 AND date = CURRENT_DATE", [chatId]);
+
+    if (accessRes.rows.length === 0) {
+      return bot.sendMessage(chatId, "❌ Tu ne peux utiliser ce bouton qu’une seule fois par jour.");
+    }
+
+    const { clicked } = accessRes.rows[0];
+    if (clicked) {
+      return bot.sendMessage(chatId, "✅ Tu as déjà reçu ton pronostic aujourd’hui. Patiente jusqu’à demain.");
+    }
+
+    // Envoi du coupon du jour
+    const result = await pool.query("SELECT * FROM daily_pronos WHERE date = CURRENT_DATE LIMIT 1");
+    const coupon = result.rows.length > 0 ? result.rows[0].content : "⚠️ Aucun coupon disponible aujourd'hui.";
+
+    await bot.sendMessage(chatId, `🎯 *Pronostic du jour :*\n\n${coupon}`, {
+      parse_mode: "Markdown",
       reply_markup: {
         keyboard: [
-          ["1xbet", "888starz"],
-          ["melbet", "winwin"],
+          ["🏆 Mes Points", "🤝 Parrainage"],
+          ["🆘 Assistance 🤖"]
         ],
-        resize_keyboard: true,
-        one_time_keyboard: true,
-      },
+        resize_keyboard: true
+      }
     });
+
+    // Mise à jour : bouton déjà utilisé aujourd'hui
+    await pool.query(`
+      UPDATE daily_access SET clicked = true
+      WHERE telegram_id = $1 AND date = CURRENT_DATE
+    `, [chatId]);
+  }
+});
+  
+      // Sinon lancer la procédure de validation (ton code actuel)
+      userStates[chatId] = { step: "await_bookmaker" };
+      startTimeout(chatId, bot);
+      return bot.sendMessage(chatId, "🔐 Pour accéder aux pronostics, indique ton bookmaker :", {
+        reply_markup: {
+          keyboard: [
+            ["1xbet", "888starz"],
+            ["melbet", "winwin"],
+          ],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+        },
+      });
+    } catch (err) {
+      console.error("Erreur lors de la vérification ou récupération du pronostic :", err);
+      return bot.sendMessage(chatId, "❌ Une erreur est survenue, réessaie plus tard.");
+    }
   }
 
   // 🔁 Notification si l’utilisateur est déjà en cours
