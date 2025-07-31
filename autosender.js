@@ -1,11 +1,13 @@
-const schedule = require('node-schedule');
-const { pool } = require('./db');
-const generateCouponEurope = require('./generateCouponEurope');
-const generateCouponAfrica = require('./generateCouponAfrica');
-const generateCouponAmerica = require('./generateCouponAmerica');
-const generateCouponAsia = require('./generateCouponAsia');
-const bot = require('./bot'); // Assure-toi que ton bot est exporté dans un fichier à part
-const CHANNEL_ID = process.env.CHANNEL_ID; // Exemple : "@nom_du_canal"
+require("dotenv").config();
+const { pool } = require("./db");
+const schedule = require("node-schedule");
+const generateCouponEurope = require("./generateCouponEurope");
+const generateCouponAfrica = require("./generateCouponAfrica");
+const generateCouponAmerica = require("./generateCouponAmerica");
+const generateCouponAsia = require("./generateCouponAsia");
+const { formatMatchTips } = require("./couponUtils");
+const bot = require('./bot'); 
+const CHANNEL_ID = process.env.CHANNEL_ID; 
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -46,52 +48,67 @@ schedule.scheduleJob('0 6 * * *', async () => {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Schedule à 7h15 UTC
+schedule.scheduleJob("15 7 * * *", async () => {
+  const existing = await getTodayCoupon();
+  if (existing) return console.log("✅ Coupon déjà généré aujourd'hui.");
+
+  const matches = await generateFullCoupon();
+  if (!matches.length) return console.log("❌ Aucun match récupéré.");
+
+  await saveTodayCoupon(matches);
+  await sendToChannel(matches);
+  await sendToVerifiedUsers(matches);
+  console.log("🚀 Coupon généré et envoyé avec succès !");
+});
 
 
 
-schedule.scheduleJob('15 7 * * *', async () => {
-  try {
-    // Vérifie s'il y a déjà un coupon inséré manuellement aujourd'hui
-    const check = await pool.query("SELECT * FROM daily_pronos WHERE date = CURRENT_DATE LIMIT 1");
+async function generateFullCoupon() {
+  const europeMatches = await generateCouponEurope();
+  const africaMatches = await generateCouponAfrica();
+  const americaMatches = await generateCouponAmerica();
+  const asiaMatches = await generateCouponAsia();
 
-    if (check.rows.length === 0) {
-     console.log("⚙️ Génération automatique du coupon...");
+  const allMatches = [
+    ...europeMatches.slice(0, 2),
+    ...africaMatches.slice(0, 2),
+    ...americaMatches.slice(0, 2),
+    ...asiaMatches.slice(0, 2)
+  ];
 
-    // Générer 2 matchs par continent
-    const matchesEurope = await generateCouponEurope(2);
-    const matchesAfrica = await generateCouponAfrica(2);
-    const matchesAmerica = await generateCouponAmerica(2);
-    const matchesAsia = await generateCouponAsia(2);
+  return allMatches;
+}
 
-    const fullCoupon = `🌍 *Coupon du jour :*\n\n` +
-      `🇪🇺 *Europe*\n${matchesEurope}\n\n` +
-      `🌍 *Afrique*\n${matchesAfrica}\n\n` +
-      `🌎 *Amérique*\n${matchesAmerica}\n\n` +
-      `🌏 *Asie*\n${matchesAsia
+async function getTodayCoupon() {
+  const today = new Date().toISOString().split("T")[0];
+  const result = await pool.query(
+    "SELECT * FROM daily_pronos WHERE date::date = $1",
+    [today]
+  );
+  return result.rows[0];
+}
 
-                   
-      if (coupon) {
-        // Enregistrer dans daily_pronos
-        await pool.query(
-          "INSERT INTO daily_pronos (date, content, source) VALUES (CURRENT_DATE, $1, 'auto')",
-          [coupon]
-        );
+async function saveTodayCoupon(matches) {
+  const today = new Date().toISOString().split("T")[0];
+  await pool.query(
+    "INSERT INTO daily_pronos (date, matches) VALUES ($1, $2)",
+    [today, JSON.stringify(matches)]
+  );
+}
+async function sendToVerifiedUsers(matches) {
+  const users = await pool.query("SELECT telegram_id FROM verified_users");
+  const message = `🎯 𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥 🎯\n\n` + formatMatchTips(matches);
 
-        // Envoyer à tous les utilisateurs validés
-        const users = await pool.query("SELECT telegram_id FROM verified_users");
-
-        for (const user of users.rows) {
-          await bot.sendMessage(user.telegram_id, `🎯 *Pronostic du jour :*\n\n${coupon}`, {
-            parse_mode: "Markdown",
-            reply_markup: {
-              keyboard: [
-                ["🏆 Mes Points", "🤝 Parrainage"],
-                ["🆘 Assistance 🤖"]
-              ],
-              resize_keyboard: true
-            }
-          });
-
+  for (const user of users.rows) {
+    try {
+      await bot.sendMessage(user.telegram_id, message, { parse_mode: "HTML" });
+    } catch (error) {
+      console.error(`❌ Erreur d'envoi à ${user.telegram_id}`, error.message);
+    }
+  }
+}
+       
           // Mettre clicked à true dans daily_access
           await pool.query(`
             INSERT INTO daily_access (telegram_id, date, clicked)
