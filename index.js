@@ -656,76 +656,68 @@ function startTimeout(chatId, bot) {
 
   clearTimeout(timeoutMap[chatId]);
 
-  const data = {
-    telegram_id: chatId,
-    username: msg.from.username || "Aucun",
-    bookmaker: state.bookmaker,
-    deposit_id: state.depositId,
-    amount,
-  };
+const data = {
+  telegram_id: chatId,
+  username: msg.from.username || "Aucun",
+  bookmaker: state.bookmaker,
+  deposit_id: state.depositId,
+  amount,
+};
 
-  await pool.query(
-    `INSERT INTO pending_verifications (telegram_id, username, bookmaker, deposit_id, amount)
-     VALUES ($1, $2, $3, $4, $5) ON CONFLICT (telegram_id) DO NOTHING`,
-    [data.telegram_id, data.username, data.bookmaker, data.deposit_id, data.amount]
-  );
+await pool.query(
+  `INSERT INTO pending_verifications (telegram_id, username, bookmaker, deposit_id, amount)
+   VALUES ($1, $2, $3, $4, $5) ON CONFLICT (telegram_id) DO NOTHING`,
+  [data.telegram_id, data.username, data.bookmaker, data.deposit_id, data.amount]
+);
 
-  delete userStates[chatId];
+delete userStates[chatId];
 
-  // Envoi du message initial
-  const sentMessage = await bot.sendMessage(chatId, "⌛ Chargement.", {
+// Envoi du message initial
+const sentMessage = await bot.sendMessage(chatId, "⌛ Chargement.", {
+  parse_mode: "Markdown",
+});
+
+// Animation du message (chargement...)
+setTimeout(() => {
+  bot.editMessageText("⌛ Chargement..", {
+    chat_id: chatId,
+    message_id: sentMessage.message_id,
     parse_mode: "Markdown",
   });
-
-  // Animation dans le même message
-  setTimeout(() => {
-    bot.editMessageText("⌛ Chargement..", {
-      chat_id: chatId,
-      message_id: sentMessage.message_id,
-      parse_mode: "Markdown"
-    });
-  }, 1000);
-
-  setTimeout(() => {
-    bot.editMessageText("⌛ Chargement...", {
-      chat_id: chatId,
-      message_id: sentMessage.message_id,
-      parse_mode: "Markdown"
-    });
-  }, 2000);
+}, 1000);
 
 setTimeout(() => {
-    bot.editMessageText("⌛ Chargement...", {
-      chat_id: chatId,
-      message_id: sentMessage.message_id,
-      parse_mode: "Markdown"
-    });
-  }, 3000);
-
+  bot.editMessageText("⌛ Chargement...", {
+    chat_id: chatId,
+    message_id: sentMessage.message_id,
+    parse_mode: "Markdown",
+  });
+}, 2000);
 
 setTimeout(() => {
-    bot.editMessageText("⌛ Chargement...", {
-      chat_id: chatId,
-      message_id: sentMessage.message_id,
-      parse_mode: "Markdown"
-    });
-  }, 4000);
+  bot.editMessageText("⌛ Chargement...", {
+    chat_id: chatId,
+    message_id: sentMessage.message_id,
+    parse_mode: "Markdown",
+  });
+}, 3000);
 
-    
-  setTimeout(() => {
+setTimeout(() => {
+  bot.editMessageText("⌛ Chargement...", {
+    chat_id: chatId,
+    message_id: sentMessage.message_id,
+    parse_mode: "Markdown",
+  });
+}, 4000);
+
+// Message final
+setTimeout(() => {
   bot.sendMessage(chatId, "*⌛ Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*", {
-    parse_mode: "Markdown"
+    parse_mode: "Markdown",
   });
 }, 5000);
 
-  return;
-}
-
-
-
-
-
-
+return;
 
       // ✅ Validé → vérifier s’il a déjà eu le coupon
       const accessRes = await pool.query(
