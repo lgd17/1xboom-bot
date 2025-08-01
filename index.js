@@ -165,6 +165,7 @@ async function isUserInChannel(userId, channelUsername) {
 }
 
 //async function sendMainMenu(chatId) {
+async function sendMainMenu(chatId) {
   try {
     const res = await pool.query(
       "SELECT * FROM verified_users WHERE telegram_id = $1",
@@ -199,6 +200,7 @@ async function isUserInChannel(userId, channelUsername) {
     bot.sendMessage(chatId, "❌ Une erreur est survenue lors du chargement du menu.");
   }
 }
+
 
 // --- /start pour afficher le menu ---
 bot.onText(/\/start/, async (msg) => {
