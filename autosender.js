@@ -96,5 +96,18 @@ module.exports = function setupAutoSender() {
     `, [user.telegram_id]);
   }
 
+// 🧹 Nettoyage des pronos API de plus de 3 jours chaque nuit à 2h
+schedule.scheduleJob("0 2 * * *", async () => {
+  try {
+    const { rowCount } = await pool.query(`
+      DELETE FROM daily_pronos
+      WHERE created_at < NOW() - INTERVAL '3 days'
+      AND content ILIKE '%api%'
+    `);
 
+    console.log(`🧹 ${rowCount} prono(s) API supprimé(s).`);
+  } catch (err) {
+    console.error("❌ Erreur de nettoyage :", err.message);
+  }
+});
 
