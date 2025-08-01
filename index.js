@@ -652,8 +652,8 @@ if (text === "🎯 Pronostics du jour") {
             ["melbet", "winwin"],
           ],
           resize_keyboard: true,
-          one_time_keyboard: true,
-        },
+          remove_keyboard: true,
+        }, 
       });
     } catch (err) {
       console.error("Erreur lors de la vérification ou récupération du pronostic :", err);
@@ -666,34 +666,46 @@ if (text === "🎯 Pronostics du jour") {
     return; // Ignore les autres messages
   }
 
+  // Étape 1 : Choix du bookmaker
   if (state?.step === "await_bookmaker") {
-    if (!validBookmakers.includes(text.toLowerCase())) {
-      return bot.sendMessage(chatId, "❌ Choix invalide. Sélectionne un bookmaker depuis les boutons.");
+    if (!validBookmakers.map(b => b.toLowerCase()).includes(text.toLowerCase())) {
+      return bot.sendMessage(chatId, "*❌ Choix invalide. Sélectionne un bookmaker depuis les boutons.*", {
+        parse_mode: "Markdown",
+      });
     }
     userStates[chatId] = { step: "await_id", bookmaker: text };
     startTimeout(chatId, bot);
-    return bot.sendMessage(chatId, "🔢 Entrez maintenant votre identifiant de dépôt (7-10 chiffres) :");
+    return bot.sendMessage(chatId, "*🔢 Entrez maintenant votre identifiant de dépôt (7-10 chiffres) :*", {
+      parse_mode: "Markdown",
+    });
   }
 
+  // Étape 2 : ID de dépôt
   if (state?.step === "await_id") {
-    if (!/^\d{6,}$/.test(text)) {
-      return bot.sendMessage(chatId, "❌ Identifiant invalide. Doit être 7 à 10 chiffres.");
+    if (!/^\d{7,10}$/.test(text)) {
+      return bot.sendMessage(chatId, "*❌ Identifiant invalide. Doit être 7 à 10 chiffres.*", {
+        parse_mode: "Markdown",
+      });
     }
     userStates[chatId].depositId = text;
     userStates[chatId].step = "await_amount";
     startTimeout(chatId, bot);
-    return bot.sendMessage(chatId, "💰 Indique le **montant déposé** (en FCFA, $ , £ ...) :");
+    return bot.sendMessage(chatId, "*💰 Indique le montant déposé (en FCFA, $ , £ ...) :*", {
+      parse_mode: "Markdown",
+    });
   }
 
+  // Étape 3 : Montant déposé
   if (state?.step === "await_amount") {
-    const amount = parseInt(text);
+    const amount = parseInt(text.replace(/[^\d]/g, ""));
     if (isNaN(amount) || amount < 5 || amount > 10000) {
-      return bot.sendMessage(chatId, "❌ Montant invalide. Envoie un nombre supérieur à 5$ (2000fcfa).");
+      return bot.sendMessage(chatId, "*❌ Montant invalide. Envoie un nombre supérieur à 5$ (2000fcfa).*", {
+        parse_mode: "Markdown",
+      });
     }
 
     clearTimeout(timeoutMap[chatId]);
 
-    // ✅ Enregistrement dans table des demandes
     const data = {
       telegram_id: chatId,
       username: msg.from.username || "Aucun",
@@ -710,16 +722,20 @@ if (text === "🎯 Pronostics du jour") {
 
     delete userStates[chatId];
 
-    return bot.sendMessage(chatId, "⌛ Merci, ta demande est en attente de validation 🔎.\n\n🕒 Tu seras notifié une fois validé.");
+    return bot.sendMessage(
+      chatId,
+      "*⌛ Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*",
+      { parse_mode: "Markdown" }
+    );
   }
 
-  // Cas de double demande
+  // Tentative d'accès au pronostic alors qu'une demande est en cours
   if (text === "🎯 Pronostics du jour" && state) {
-    return bot.sendMessage(chatId, "⚠️ Tu as déjà une demande en cours. Merci de compléter les étapes ou attendre la fin du délai.");
+    return bot.sendMessage(chatId, "*⚠️ Tu as déjà une demande en cours. Merci de compléter les étapes ou attendre la fin du délai.*", {
+      parse_mode: "Markdown",
+    });
   }
 });
-
-      
 
 /////////////////////////////////////// ✅ VOIRE LES VÉRIFICATIONS EN ATTENTE ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 // === COMMANDES ===
@@ -786,7 +802,7 @@ await bot.sendMessage(user.telegram_id, `✅ Ton compte a été validé avec suc
   reply_markup: {
     keyboard: [["🎯 Pronostics du jour"]],
     resize_keyboard: true,
-    one_time_keyboard: true
+    remove_keyboard: true
   }
 });
 
