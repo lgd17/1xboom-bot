@@ -24,16 +24,12 @@ module.exports = function setupAutoSender() {
         const matches = JSON.parse(coupon.matches || coupon.content || "[]");
         const message = formatMatchTips(matches);
 
+        // Envoi aux utilisateurs validés
         const users = await pool.query("SELECT telegram_id FROM verified_users");
-
         for (let user of users.rows) {
-          await bot.sendMessage(
-            user.telegram_id,
-            `🎯*𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥*🎯\n\n${message}`,
-            { parse_mode: "Markdown" }
-          );
+          await bot.sendMessage(user.telegram_id, `🎯*𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥*🎯\n\n${message}`, { parse_mode: "Markdown" });
 
-          // 🔄 Enregistrement de l'accès
+          // ✅ Enregistrement de l'accès
           await pool.query(`
             INSERT INTO daily_access (telegram_id, date, clicked)
             VALUES ($1, CURRENT_DATE, true)
@@ -41,15 +37,15 @@ module.exports = function setupAutoSender() {
           `, [user.telegram_id]);
         }
 
-        // 📣 Annonce dans le canal
+        // ✅ Annonce dans le canal
         await bot.sendMessage(CHANNEL_ID, `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot  : ${BOT_LINK}`);
       }
     } catch (err) {
-      console.error("❌ Erreur envoi coupon manuel :", err);
+      console.error("Erreur envoi coupon manuel :", err);
     }
   });
 
-  // ✅ Génération automatique du coupon via API à 7h15 UTC
+  // ✅ Génération + envoi coupon API à 7h15 UTC
   schedule.scheduleJob("15 7 * * *", async () => {
     try {
       const { rows } = await pool.query(`
@@ -71,16 +67,12 @@ module.exports = function setupAutoSender() {
           `, [JSON.stringify(allMatches)]);
 
           const message = formatMatchTips(allMatches);
+
           const users = await pool.query("SELECT telegram_id FROM verified_users");
-
           for (let user of users.rows) {
-            await bot.sendMessage(
-              user.telegram_id,
-              `🎯*𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥*🎯\n\n${message}`,
-              { parse_mode: "Markdown" }
-            );
+            await bot.sendMessage(user.telegram_id, `🎯*𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥*🎯\n\n${message}`, { parse_mode: "Markdown" });
 
-            // 🔄 Enregistrement de l'accès
+            // ✅ Enregistrement de l'accès
             await pool.query(`
               INSERT INTO daily_access (telegram_id, date, clicked)
               VALUES ($1, CURRENT_DATE, true)
@@ -88,16 +80,16 @@ module.exports = function setupAutoSender() {
             `, [user.telegram_id]);
           }
 
-          // 📣 Annonce dans le canal
+          // ✅ Annonce dans le canal
           await bot.sendMessage(CHANNEL_ID, `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot  : ${BOT_LINK}`);
         }
       }
     } catch (err) {
-      console.error("❌ Erreur génération coupon API :", err);
+      console.error("Erreur génération coupon API :", err);
     }
   });
 
-  // 🧹 Nettoyage des anciens pronostics API à 2h00 UTC
+  // 🧹 Nettoyage des pronos API de plus de 3 jours chaque nuit à 2h UTC
   schedule.scheduleJob("0 2 * * *", async () => {
     try {
       const { rowCount } = await pool.query(`
@@ -112,3 +104,4 @@ module.exports = function setupAutoSender() {
     }
   });
 };
+
