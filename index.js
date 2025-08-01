@@ -701,14 +701,22 @@ setTimeout(() => {
       parse_mode: "Markdown"
     });
   }, 3000);
-  
-  setTimeout(() => {
-    bot.editMessageText("*⌛ Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*", {
+
+
+setTimeout(() => {
+    bot.editMessageText("⌛ Chargement...", {
       chat_id: chatId,
       message_id: sentMessage.message_id,
       parse_mode: "Markdown"
     });
   }, 3000);
+
+    
+  setTimeout(() => {
+  bot.sendMessage(chatId, "*⌛ Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*", {
+    parse_mode: "Markdown"
+  });
+}, 5000);
 
   return;
 }
