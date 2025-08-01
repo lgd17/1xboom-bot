@@ -709,7 +709,7 @@ setTimeout(() => {
       message_id: sentMessage.message_id,
       parse_mode: "Markdown"
     });
-  }, 3000);
+  }, 4000);
 
     
   setTimeout(() => {
