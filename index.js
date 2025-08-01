@@ -11,6 +11,7 @@ require("./autoCoupons");
 const schedule = require("node-schedule");
 const { pool, insertManualCoupon } = require("./db");
 const setupAutoSender = require("./autosender");
+setupAutoSender(); // Lance la tâc
 const fetch = require("node-fetch"); // à garder si tu fais des appels API
 const generateCouponEurope = require('./generateCouponEurope');
 const generateCouponAfrica = require('./generateCouponAfrica');
