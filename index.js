@@ -572,7 +572,6 @@ async function envoyerMessageComplet(bot, chatId, message) {
 //=========================== VÉRIFICATION_USER-INSCRIT
 const timeoutMap = {};
 const validBookmakers = ["1xbet", "888starz", "melbet", "winwin"];
-const userStates = {};
 
 function startTimeout(chatId, bot) {
   clearTimeout(timeoutMap[chatId]);
