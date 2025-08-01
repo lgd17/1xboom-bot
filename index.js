@@ -582,14 +582,40 @@ function startTimeout(chatId, bot) {
   }, 5 * 60 * 1000); // 5 minutes
 }
 
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text?.trim();
-  if (!text || text.startsWith("/")) return;
 
   const state = userStates[chatId];
 
+ 
+
+  bot.on("message", async (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text?.trim();
+  if (!text || text.startsWith("/")) return;
+    
+
   try {
+    // 🎯 Cas : bouton pronostic du jour
+    if (text === "🎯 Pronostics du jour") {
+      const res = await pool.query("SELECT * FROM verified_users WHERE telegram_id = $1", [chatId]);
+
+      // 🚫 Non validé → lancer procédure
+      if (res.rows.length === 0) {
+        userStates[chatId] = { step: "await_bookmaker" };
+        startTimeout(chatId, bot);
+        return bot.sendMessage(chatId, "🔐 Pour accéder aux pronostics, indique ton bookmaker :", {
+          reply_markup: {
+            keyboard: [
+              ["1xbet", "888starz"],
+              ["melbet", "winwin"],
+            ],
+            resize_keyboard: true,
+            remove_keyboard: true,
+          },
+        });
+      }
+
+
+ try {
     // 🔁 Si une étape est en cours
     if (state) {
       if (state.step === "await_bookmaker") {
@@ -688,25 +714,10 @@ setTimeout(() => {
 }
 
 
-    // 🎯 Cas : bouton pronostic du jour
-    if (text === "🎯 Pronostics du jour") {
-      const res = await pool.query("SELECT * FROM verified_users WHERE telegram_id = $1", [chatId]);
 
-      // 🚫 Non validé → lancer procédure
-      if (res.rows.length === 0) {
-        userStates[chatId] = { step: "await_bookmaker" };
-        startTimeout(chatId, bot);
-        return bot.sendMessage(chatId, "🔐 Pour accéder aux pronostics, indique ton bookmaker :", {
-          reply_markup: {
-            keyboard: [
-              ["1xbet", "888starz"],
-              ["melbet", "winwin"],
-            ],
-            resize_keyboard: true,
-            remove_keyboard: true,
-          },
-        });
-      }
+
+
+
 
       // ✅ Validé → vérifier s’il a déjà eu le coupon
       const accessRes = await pool.query(
