@@ -582,27 +582,23 @@ function startTimeout(chatId, bot) {
   }, 5 * 60 * 1000); // 5 minutes
 }
 
-
-  const state = userStates[chatId];
-
- 
-
-  bot.on("message", async (msg) => {
+bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text?.trim();
   if (!text || text.startsWith("/")) return;
-    
+
+  const state = userStates[chatId];
 
   try {
     // 🎯 Cas : bouton pronostic du jour
     if (text === "🎯 Pronostics du jour") {
       const res = await pool.query("SELECT * FROM verified_users WHERE telegram_id = $1", [chatId]);
 
-      // 🚫 Non validé → lancer procédure
       if (res.rows.length === 0) {
         userStates[chatId] = { step: "await_bookmaker" };
         startTimeout(chatId, bot);
         return bot.sendMessage(chatId, "🔐 Pour accéder aux pronostics, indique ton bookmaker :", {
+          parse_mode: "Markdown",
           reply_markup: {
             keyboard: [
               ["1xbet", "888starz"],
@@ -614,8 +610,44 @@ function startTimeout(chatId, bot) {
         });
       }
 
+      // ✅ Vérifie s’il a déjà eu le coupon
+      const accessRes = await pool.query(
+        "SELECT * FROM daily_access WHERE telegram_id = $1 AND date = CURRENT_DATE",
+        [chatId]
+      );
 
- try {
+      if (accessRes.rows.length === 0) {
+        await pool.query(
+          `INSERT INTO daily_access (telegram_id, date, clicked) VALUES ($1, CURRENT_DATE, false)
+           ON CONFLICT (telegram_id, date) DO NOTHING`,
+          [chatId]
+        );
+      } else if (accessRes.rows[0].clicked) {
+        return bot.sendMessage(chatId, "✅ Tu as déjà reçu ton pronostic aujourd’hui. Patiente jusqu’à demain.");
+      }
+
+      const result = await pool.query("SELECT * FROM daily_pronos WHERE date = CURRENT_DATE LIMIT 1");
+      const coupon = result.rows.length > 0 ? result.rows[0].content : "⚠️ Aucun coupon disponible aujourd'hui.";
+
+      await bot.sendMessage(chatId, `🎯 *Pronostic du jour :*\n\n${coupon}`, {
+        parse_mode: "Markdown",
+        reply_markup: {
+          keyboard: [ ["🏆 Mes Points"],
+
+            ["🆘 Assistance 🤖", "🤝 Parrainage"]
+            ],
+          resize_keyboard: true
+        }
+      });
+
+      await pool.query(
+        `UPDATE daily_access SET clicked = true WHERE telegram_id = $1 AND date = CURRENT_DATE`,
+        [chatId]
+      );
+
+      return;
+    }
+
     // 🔁 Si une étape est en cours
     if (state) {
       if (state.step === "await_bookmaker") {
@@ -646,123 +678,83 @@ function startTimeout(chatId, bot) {
         });
       }
 
-  if (state.step === "await_amount") {
-  const amount = parseInt(text.replace(/[^\d]/g, ""));
-  if (isNaN(amount) || amount < 5 || amount > 10000) {
-    return bot.sendMessage(chatId, "*❌ Montant invalide. Envoie un nombre supérieur à 5$ (2000fcfa).*", {
-      parse_mode: "Markdown",
-    });
-  }
-
-  clearTimeout(timeoutMap[chatId]);
-
-const data = {
-  telegram_id: chatId,
-  username: msg.from.username || "Aucun",
-  bookmaker: state.bookmaker,
-  deposit_id: state.depositId,
-  amount,
-};
-
-await pool.query(
-  `INSERT INTO pending_verifications (telegram_id, username, bookmaker, deposit_id, amount)
-   VALUES ($1, $2, $3, $4, $5) ON CONFLICT (telegram_id) DO NOTHING`,
-  [data.telegram_id, data.username, data.bookmaker, data.deposit_id, data.amount]
-);
-
-delete userStates[chatId];
-
-// Envoi du message initial
-const sentMessage = await bot.sendMessage(chatId, "⌛ Chargement.", {
-  parse_mode: "Markdown",
-});
-
-// Animation du message (chargement...)
-setTimeout(() => {
-  bot.editMessageText("⌛ Chargement..", {
-    chat_id: chatId,
-    message_id: sentMessage.message_id,
-    parse_mode: "Markdown",
-  });
-}, 1000);
-
-setTimeout(() => {
-  bot.editMessageText("⌛ Chargement...", {
-    chat_id: chatId,
-    message_id: sentMessage.message_id,
-    parse_mode: "Markdown",
-  });
-}, 2000);
-
-setTimeout(() => {
-  bot.editMessageText("⌛ Chargement...", {
-    chat_id: chatId,
-    message_id: sentMessage.message_id,
-    parse_mode: "Markdown",
-  });
-}, 3000);
-
-setTimeout(() => {
-  bot.editMessageText("⌛ Chargement...", {
-    chat_id: chatId,
-    message_id: sentMessage.message_id,
-    parse_mode: "Markdown",
-  });
-}, 4000);
-
-// Message final
-setTimeout(() => {
-  bot.sendMessage(chatId, "*⌛ Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*", {
-    parse_mode: "Markdown",
-  });
-}, 5000);
-
-return;
-
-      // ✅ Validé → vérifier s’il a déjà eu le coupon
-      const accessRes = await pool.query(
-        "SELECT * FROM daily_access WHERE telegram_id = $1 AND date = CURRENT_DATE",
-        [chatId]
-      );
-
-      if (accessRes.rows.length === 0) {
-        await pool.query(
-          `INSERT INTO daily_access (telegram_id, date, clicked) VALUES ($1, CURRENT_DATE, false)
-           ON CONFLICT (telegram_id, date) DO NOTHING`,
-          [chatId]
-        );
-      } else if (accessRes.rows[0].clicked) {
-        return bot.sendMessage(chatId, "✅ Tu as déjà reçu ton pronostic aujourd’hui. Patiente jusqu’à demain.");
-      }
-
-      // 🎯 Envoi du pronostic
-      const result = await pool.query("SELECT * FROM daily_pronos WHERE date = CURRENT_DATE LIMIT 1");
-      const coupon = result.rows.length > 0 ? result.rows[0].content : "⚠️ Aucun coupon disponible aujourd'hui.";
-
-      await bot.sendMessage(chatId, `🎯 *Pronostic du jour :*\n\n${coupon}`, {
-        parse_mode: "Markdown",
-        reply_markup: {
-          keyboard: [
-            ["🏆 Mes Points", "🤝 Parrainage"],
-            ["🆘 Assistance 🤖"]
-          ],
-          resize_keyboard: true
+      if (state.step === "await_amount") {
+        const amount = parseInt(text.replace(/[^\d]/g, ""));
+        if (isNaN(amount) || amount < 5 || amount > 10000) {
+          return bot.sendMessage(chatId, "*❌ Montant invalide. Envoie un nombre supérieur à 5$ (2000fcfa).*", {
+            parse_mode: "Markdown",
+          });
         }
-      });
 
-      await pool.query(
-        `UPDATE daily_access SET clicked = true WHERE telegram_id = $1 AND date = CURRENT_DATE`,
-        [chatId]
-      );
+        clearTimeout(timeoutMap[chatId]);
 
-      return;
+        const data = {
+          telegram_id: chatId,
+          username: msg.from.username || "Aucun",
+          bookmaker: state.bookmaker,
+          deposit_id: state.depositId,
+          amount,
+        };
+
+        await pool.query(
+          `INSERT INTO pending_verifications (telegram_id, username, bookmaker, deposit_id, amount)
+           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (telegram_id) DO NOTHING`,
+          [data.telegram_id, data.username, data.bookmaker, data.deposit_id, data.amount]
+        );
+
+        delete userStates[chatId];
+
+        const sentMessage = await bot.sendMessage(chatId, "⌛ Chargement.", {
+          parse_mode: "Markdown",
+        });
+
+        setTimeout(() => {
+          bot.editMessageText("⌛ Chargement..", {
+            chat_id: chatId,
+            message_id: sentMessage.message_id,
+            parse_mode: "Markdown",
+          });
+        }, 1000);
+
+        setTimeout(() => {
+          bot.editMessageText("⌛ Chargement...", {
+            chat_id: chatId,
+            message_id: sentMessage.message_id,
+            parse_mode: "Markdown",
+          });
+        }, 2000);
+
+        setTimeout(() => {
+          bot.editMessageText("⌛ Chargement...", {
+            chat_id: chatId,
+            message_id: sentMessage.message_id,
+            parse_mode: "Markdown",
+          });
+        }, 3000);
+
+        setTimeout(() => {
+          bot.editMessageText("⌛ Chargement...", {
+            chat_id: chatId,
+            message_id: sentMessage.message_id,
+            parse_mode: "Markdown",
+          });
+        }, 4000);
+
+        setTimeout(() => {
+          bot.sendMessage(chatId, "*⌛ Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*", {
+            parse_mode: "Markdown",
+          });
+        }, 5000);
+
+        return;
+      }
     }
-
   } catch (err) {
     console.error("❌ Erreur dans la gestion du message :", err);
     return bot.sendMessage(chatId, "❌ Une erreur est survenue, réessaie plus tard.");
   }
 });
+
 
 /////////////////////////////////////// ✅ VOIRE LES VÉRIFICATIONS EN ATTENTE ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 // === COMMANDES ===
