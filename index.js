@@ -645,22 +645,25 @@ bot.on("message", async (msg) => {
 
       return; // Fin du traitement
     }
+ ////////////////////////
+     if (text === "🎯 Pronostics du jour") {
+  const res = await pool.query("SELECT * FROM verified_users WHERE telegram_id = $1", [chatId]);
 
-    // Si pas validé et pas en cours, on lance la validation
-    if (!state) {
-      userStates[chatId] = { step: "await_bookmaker" };
-      startTimeout(chatId, bot);
-      return bot.sendMessage(chatId, "🔐 Pour accéder aux pronostics, indique ton bookmaker :", {
-        reply_markup: {
-          keyboard: [
-            ["1xbet", "888starz"],
-            ["melbet", "winwin"],
-          ],
-          resize_keyboard: true,
-          remove_keyboard: true,
-        },
-      });
-    }
+  if (res.rows.length === 0) {
+    // Démarre automatiquement la procédure de validation
+    userStates[chatId] = { step: "await_bookmaker" };
+    startTimeout(chatId, bot);
+    return bot.sendMessage(chatId, "🔐 Pour accéder aux pronostics, indique ton bookmaker :", {
+      reply_markup: {
+        keyboard: [
+          ["1xbet", "888starz"],
+          ["melbet", "winwin"],
+        ],
+        resize_keyboard: true,
+        remove_keyboard: true,
+      },
+    });
+  }
 
     // Étape 1 : Choix bookmaker
     if (state.step === "await_bookmaker") {
