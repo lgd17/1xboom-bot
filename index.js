@@ -62,12 +62,6 @@ bot.setWebHook(`${baseUrl}/bot${encodedToken}`)
   .then(() => console.log(`✅ Webhook configuré : ${baseUrl}/bot${encodedToken}`))
   .catch(err => console.error("❌ Erreur lors du setWebhook :", err));
 
-// ====== GESTION DES MESSAGES ======
-bot.on("message", (msg) => {
-  const chatId = msg.chat.id;
-  console.log("📩 Message reçu :", msg.text);
-  bot.sendMessage(chatId, `✅ Reçu : "${msg.text}"`);
-});
 
 // ====== ROUTE POUR TRAITER LES UPDATES DE TELEGRAM ======
 app.post(`/bot${encodedToken}`, (req, res) => {
@@ -183,7 +177,7 @@ async function sendMainMenu(chatId) {
 
     const message = isVerified
       ? "Bienvenue sur *1XBOOM* ! "
-      : "👋 Bienvenue sur *1XBOOM* !\n\nClique sur le bouton 🎯 Pronostics du jour pour accéder aux pronostics.";
+      : "Clique sur le bouton 🎯 Pronostics du jour pour accéder aux pronostics.";
 
     const menu = {
       reply_markup: {
@@ -626,37 +620,73 @@ bot.on("message", async (msg) => {
         });
       }
 
-      if (state.step === "await_amount") {
-        const amount = parseInt(text.replace(/[^\d]/g, ""));
-        if (isNaN(amount) || amount < 5 || amount > 10000) {
-          return bot.sendMessage(chatId, "*❌ Montant invalide. Envoie un nombre supérieur à 5$ (2000fcfa).*", {
-            parse_mode: "Markdown",
-          });
-        }
+  if (state.step === "await_amount") {
+  const amount = parseInt(text.replace(/[^\d]/g, ""));
+  if (isNaN(amount) || amount < 5 || amount > 10000) {
+    return bot.sendMessage(chatId, "*❌ Montant invalide. Envoie un nombre supérieur à 5$ (2000fcfa).*", {
+      parse_mode: "Markdown",
+    });
+  }
 
-        clearTimeout(timeoutMap[chatId]);
+  clearTimeout(timeoutMap[chatId]);
 
-        const data = {
-          telegram_id: chatId,
-          username: msg.from.username || "Aucun",
-          bookmaker: state.bookmaker,
-          deposit_id: state.depositId,
-          amount,
-        };
+  const data = {
+    telegram_id: chatId,
+    username: msg.from.username || "Aucun",
+    bookmaker: state.bookmaker,
+    deposit_id: state.depositId,
+    amount,
+  };
 
-        await pool.query(
-          `INSERT INTO pending_verifications (telegram_id, username, bookmaker, deposit_id, amount)
-           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (telegram_id) DO NOTHING`,
-          [data.telegram_id, data.username, data.bookmaker, data.deposit_id, data.amount]
-        );
+  await pool.query(
+    `INSERT INTO pending_verifications (telegram_id, username, bookmaker, deposit_id, amount)
+     VALUES ($1, $2, $3, $4, $5) ON CONFLICT (telegram_id) DO NOTHING`,
+    [data.telegram_id, data.username, data.bookmaker, data.deposit_id, data.amount]
+  );
 
-        delete userStates[chatId];
+  delete userStates[chatId];
 
-        return bot.sendMessage(chatId, "*⌛ Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*", {
-          parse_mode: "Markdown",
-        });
-      }
-    }
+  // Envoi du message initial
+  const sentMessage = await bot.sendMessage(chatId, "⌛ Chargement.", {
+    parse_mode: "Markdown",
+  });
+
+  // Animation dans le même message
+  setTimeout(() => {
+    bot.editMessageText("⌛ Chargement..", {
+      chat_id: chatId,
+      message_id: sentMessage.message_id,
+      parse_mode: "Markdown"
+    });
+  }, 1000);
+
+  setTimeout(() => {
+    bot.editMessageText("⌛ Chargement...", {
+      chat_id: chatId,
+      message_id: sentMessage.message_id,
+      parse_mode: "Markdown"
+    });
+  }, 2000);
+
+setTimeout(() => {
+    bot.editMessageText("⌛ Chargement...", {
+      chat_id: chatId,
+      message_id: sentMessage.message_id,
+      parse_mode: "Markdown"
+    });
+  }, 3000);
+  
+  setTimeout(() => {
+    bot.editMessageText("*⌛ Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*", {
+      chat_id: chatId,
+      message_id: sentMessage.message_id,
+      parse_mode: "Markdown"
+    });
+  }, 3000);
+
+  return;
+}
+
 
     // 🎯 Cas : bouton pronostic du jour
     if (text === "🎯 Pronostics du jour") {
@@ -2042,11 +2072,6 @@ bot.on("message", async (msg) => {
       );
     }
   }
-});
-
-// ====== AUTRES COMMANDES/LOGIQUE ICI =======
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, "🤖 Bot démarré et prêt.");
 });
 
 //////////////////////////////////////// Taux de change (exemple)\\\\\\\\\\\\\\\\\\\\\\\\\\
