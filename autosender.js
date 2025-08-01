@@ -48,18 +48,38 @@ schedule.scheduleJob('0 6 * * *', async () => {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Schedule à 7h15 UTC
+
+// CRON : Tous les jours à 7h15 UTC
 schedule.scheduleJob("15 7 * * *", async () => {
-  const existing = await getTodayCoupon();
-  if (existing) return console.log("✅ Coupon déjà généré aujourd'hui.");
+  try {
+    const existing = await getTodayCoupon();
+    if (existing) {
+      console.log("⏭️ Coupon déjà inséré manuellement aujourd'hui.");
+      return;
+    }
 
-  const matches = await generateFullCoupon();
-  if (!matches.length) return console.log("❌ Aucun match récupéré.");
+    const matches = await generateFullCoupon();
+    if (!matches.length) {
+      console.log("❌ Aucun match récupéré via l'API.");
+      return;
+    }
 
-  await saveTodayCoupon(matches);
-  await sendToChannel(matches);
-  await sendToVerifiedUsers(matches);
-  console.log("🚀 Coupon généré et envoyé avec succès !");
+    // Sauvegarde en base
+    await saveTodayCoupon(matches);
+
+    // Envoi aux utilisateurs vérifiés
+    await sendToVerifiedUsers(matches);
+
+    // Alerte dans le canal
+    await bot.sendMessage(CHANNEL_ID,
+      `📢 Le *pronostic du jour* vient d'être publié !\n\nClique ici 👉 @nom_de_votre_bot pour le consulter si tu es validé.`,
+      { parse_mode: "Markdown" }
+    );
+
+    console.log("🚀 Coupon généré automatiquement et diffusé.");
+  } catch (err) {
+    console.error("❌ Erreur dans autosender :", err);
+  }
 });
 
 
@@ -70,14 +90,13 @@ async function generateFullCoupon() {
   const americaMatches = await generateCouponAmerica();
   const asiaMatches = await generateCouponAsia();
 
-  const allMatches = [
+  // 2 matchs max par continent
+  return [
     ...europeMatches.slice(0, 2),
     ...africaMatches.slice(0, 2),
     ...americaMatches.slice(0, 2),
     ...asiaMatches.slice(0, 2)
   ];
-
-  return allMatches;
 }
 
 async function getTodayCoupon() {
@@ -96,6 +115,13 @@ async function saveTodayCoupon(matches) {
     [today, JSON.stringify(matches)]
   );
 }
+
+function formatMatchTips(matches) {
+  return matches.map((match, i) =>
+    `⚽ <b>Match ${i + 1}</b>\n🏟️ ${match.teams}\n🕒 ${match.time} - ${match.league}\n🎯 <b>${match.tip}</b>\n`
+  ).join("\n");
+}
+
 async function sendToVerifiedUsers(matches) {
   const users = await pool.query("SELECT telegram_id FROM verified_users");
   const message = `🎯 𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥 🎯\n\n` + formatMatchTips(matches);
@@ -103,33 +129,5 @@ async function sendToVerifiedUsers(matches) {
   for (const user of users.rows) {
     try {
       await bot.sendMessage(user.telegram_id, message, { parse_mode: "HTML" });
-    } catch (error) {
-      console.error(`❌ Erreur d'envoi à ${user.telegram_id}`, error.message);
-    }
-  }
-}
-       
-          // Mettre clicked à true dans daily_access
-          await pool.query(`
-            INSERT INTO daily_access (telegram_id, date, clicked)
-            VALUES ($1, CURRENT_DATE, true)
-            ON CONFLICT (telegram_id, date) DO UPDATE SET clicked = true
-          `, [user.telegram_id]);
-        }
 
-        // Envoyer une alerte dans le canal
-        await bot.sendMessage(CHANNEL_ID, `📢 Le *pronostic du jour* vient d'être publié !\n\nClique ici 👉 @nom_de_votre_bot pour le consulter si tu es validé.`, {
-          parse_mode: "Markdown"
-        });
-
-        console.log("✅ Coupon généré automatiquement et diffusé.");
-      } else {
-        console.log("⚠️ La génération automatique a échoué (coupon vide).");
-      }
-    } else {
-      console.log("⏭️ Coupon déjà inséré manuellement aujourd'hui, aucune génération automatique.");
-    }
-  } catch (err) {
-    console.error("❌ Erreur dans autosender :", err);
-  }
-});
+  
