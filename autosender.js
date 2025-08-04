@@ -89,19 +89,30 @@ module.exports = function setupAutoSender() {
     }
   });
 
-  // 🧹 Nettoyage des pronos API de plus de 3 jours chaque nuit à 2h UTC
-  schedule.scheduleJob("0 2 * * *", async () => {
+  // 🧹 Nettoyage des pronos API de plus de 3 jours chaque nuit à 6h55 UTC
+  schedule.scheduleJob("55 6 * * *", async () => {
     try {
-      const { rowCount } = await pool.query(`
-        DELETE FROM daily_pronos
-        WHERE created_at < NOW() - INTERVAL '3 days'
-        AND content ILIKE '%api%'
-      `);
+     const { rowCount: pronosDeleted } = await pool.query(`
+      DELETE FROM daily_pronos
+      WHERE created_at < NOW() - INTERVAL '3 days'
+      AND date < CURRENT_DATE
+    `);
 
-      console.log(`🧹 ${rowCount} prono(s) API supprimé(s).`);
-    } catch (err) {
-      console.error("❌ Erreur de nettoyage :", err.message);
-    }
-  });
-};
+    const { rowCount: accessDeleted } = await pool.query(`
+      DELETE FROM daily_access
+      WHERE date < CURRENT_DATE - INTERVAL '3 days'
+    `);
 
+    console.log(`🧹 ${pronosDeleted} prono(s) supprimé(s).`);
+    console.log(`🧹 ${accessDeleted} accès supprimé(s).`);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const message = `🧹 *Nettoyage automatique effectué*\n\n📅 Date : *${today}*\n🗑️ Pronostics supprimés : *${pronosDeleted}*\n👤 Accès supprimés : *${accessDeleted}*`;
+
+    await bot.sendMessage(ADMIN_ID, message, { parse_mode: "Markdown" });
+
+  } catch (err) {
+    console.error("❌ Erreur de nettoyage :", err.message);
+    await bot.sendMessage(ADMIN_ID, `❌ Erreur lors du nettoyage : ${err.message}`);
+  }
+});
