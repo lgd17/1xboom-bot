@@ -1158,7 +1158,7 @@ bot.onText(/\/skip/, async (msg) => {
   const state = pendingCoupon[chatId];
   if (!state || state.step !== "awaiting_media") return;
 
-  await insertManualCoupon(state.content, null, null, state.date, state.type);
+  await insertManualCoupon(chatId, state.content, null, null, state.date, state.type);
   delete pendingCoupon[chatId];
   bot.sendMessage(chatId, "✅ Prono sans média enregistré.");
 });
@@ -1206,7 +1206,7 @@ bot.on("message", async (msg) => {
     if (msg.photo) {
       const fileId = msg.photo.at(-1).file_id;
       const fileUrl = await bot.getFileLink(fileId);
-      await insertManualCoupon(state.content, fileUrl, "photo", state.date, state.type);
+      await insertManualCoupon(chatId, state.content, fileUrl, "photo", state.date, state.type);
       delete pendingCoupon[chatId];
       return bot.sendMessage(chatId, "✅ Prono avec photo enregistré.");
     }
@@ -1214,7 +1214,7 @@ bot.on("message", async (msg) => {
     if (msg.video) {
       const fileId = msg.video.file_id;
       const fileUrl = await bot.getFileLink(fileId);
-      await insertManualCoupon(state.content, fileUrl, "video", state.date, state.type);
+      await insertManualCoupon(chatId,state.content, fileUrl, "video", state.date, state.type);
       delete pendingCoupon[chatId];
       return bot.sendMessage(chatId, "✅ Prono avec vidéo enregistré.");
     }
@@ -1264,20 +1264,6 @@ bot.on("callback_query", async (query) => {
 
   await bot.answerCallbackQuery(query.id);
 });
-
-// Fonction d’insertion en base, mise à jour pour prendre en compte le type
-async function insertManualCoupon(content, mediaUrl, mediaType, date, type = "gratuit") {
-  try {
-    await pool.query(
-      `INSERT INTO daily_pronos (content, media_url, media_type, date, date_only, type)
-       VALUES ($1, $2, $3, $4, $4::date, $5)`,
-      [content, mediaUrl, mediaType, date, type]
-    );
-  } catch (err) {
-    console.error("Erreur lors de l'insertion du prono :", err);
-  }
-}
-
 
 /////////////////////////////////////// ✅ VOIRE LES PRONOSTIQUE QUI SONT DISPO ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 //=== COMMANDE /voir_pronos ===
