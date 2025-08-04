@@ -597,7 +597,7 @@ bot.on("message", async (msg) => {
       if (res.rows.length === 0) {
         userStates[chatId] = { step: "await_bookmaker" };
         startTimeout(chatId, bot);
-        return bot.sendMessage(chatId, "🔐 Pour accéder aux pronostics, indique ton bookmaker :", {
+        return bot.sendMessage(chatId, "🔐 *Pour accéder aux pronostics, indique ton bookmaker :*", {
           parse_mode: "Markdown",
           reply_markup: {
             keyboard: [
@@ -626,19 +626,42 @@ bot.on("message", async (msg) => {
         return bot.sendMessage(chatId, "✅ Tu as déjà reçu ton pronostic aujourd’hui. Patiente jusqu’à demain.");
       }
 
-      const result = await pool.query("SELECT * FROM daily_pronos WHERE date = CURRENT_DATE LIMIT 1");
-      const coupon = result.rows.length > 0 ? result.rows[0].content : "⚠️ Aucun coupon disponible aujourd'hui.";
+      // 1. Requête SQL : récupérer le coupon gratuit du jour
+const result = await pool.query(`
+  SELECT content, media_url, media_type
+  FROM daily_pronos
+  WHERE date_only = CURRENT_DATE
+    AND type = 'gratuit'
+  LIMIT 1
+`);
 
-      await bot.sendMessage(chatId, `🎯 *Pronostic du jour :*\n\n${coupon}`, {
-        parse_mode: "Markdown",
-        reply_markup: {
-          keyboard: [ ["🏆 Mes Points"],
+// 2. S’il n’y a aucun coupon
+if (result.rows.length === 0) {
+  return bot.sendMessage(chatId, "⚠️ Aucun coupon disponible aujourd'hui.");
+}
 
-            ["🆘 Assistance 🤖", "🤝 Parrainage"]
-            ],
-          resize_keyboard: true
-        }
-      });
+// 3. Extraire les champs
+const { content, media_url, media_type } = result.rows[0];
+
+// 4. Envoyer d’abord le média si présent
+if (media_url) {
+  if (media_type === 'photo') {
+    await bot.sendPhoto(chatId, media_url);
+  } else if (media_type === 'video') {
+    await bot.sendVideo(chatId, media_url);
+  }
+}
+ //  5. Envoyer le contenu texte du pronostic
+await bot.sendMessage(chatId, `🎯 *Pronostic du jour :*\n\n${content}`, {
+  parse_mode: "Markdown",
+  reply_markup: {
+    keyboard: [
+      ["🏆 Mes Points"],
+      ["🆘 Assistance 🤖", "🤝 Parrainage"]
+    ],
+    resize_keyboard: true
+  }
+});
 
       await pool.query(
         `UPDATE daily_access SET clicked = true WHERE telegram_id = $1 AND date = CURRENT_DATE`,
@@ -725,7 +748,7 @@ bot.on("message", async (msg) => {
         }, 2000);
 
         setTimeout(() => {
-          bot.editMessageText("⌛ Chargement...", {
+          bot.editMessageText("⌛ Chargement.", {
             chat_id: chatId,
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
@@ -733,7 +756,7 @@ bot.on("message", async (msg) => {
         }, 3000);
 
         setTimeout(() => {
-          bot.editMessageText("⌛ Chargement...", {
+          bot.editMessageText("⌛ Chargement..", {
             chat_id: chatId,
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
@@ -741,10 +764,52 @@ bot.on("message", async (msg) => {
         }, 4000);
 
         setTimeout(() => {
-          bot.sendMessage(chatId, "*⌛ Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*", {
+          bot.editMessageText("⌛ Chargement...", {
+            chat_id: chatId,
+            message_id: sentMessage.message_id,
             parse_mode: "Markdown",
           });
         }, 5000);
+
+        setTimeout(() => {
+          bot.editMessageText("⌛ Chargement.", {
+            chat_id: chatId,
+            message_id: sentMessage.message_id,
+            parse_mode: "Markdown",
+          });
+        }, 6000);
+
+        setTimeout(() => {
+          bot.editMessageText("⌛ Chargement..", {
+            chat_id: chatId,
+            message_id: sentMessage.message_id,
+            parse_mode: "Markdown",
+          });
+        }, 7000);
+
+         setTimeout(() => {
+          bot.editMessageText("⌛ Chargement...", {
+            chat_id: chatId,
+            message_id: sentMessage.message_id,
+            parse_mode: "Markdown",
+          });
+        }, 8000);
+
+        setTimeout(() => {
+          bot.editMessageText("⌛ Chargement...", {
+            chat_id: chatId,
+            message_id: sentMessage.message_id,
+            parse_mode: "Markdown",
+          });
+        }, 9000);
+
+
+
+        setTimeout(() => {
+          bot.sendMessage(chatId, "*🤖 Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*", {
+            parse_mode: "Markdown",
+          });
+        }, 10000);
 
         return;
       }
@@ -1062,8 +1127,7 @@ bot.onText(/\/sendtestcoupon/, async (msg) => {
 const ADMIN_ID = 6248838967;
 let pendingCoupon = {};
 /////////////////////////////////////// ✅ VOIRE LES VÉRIFICATIONS EN ATTENTE ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-//=== COMMANDE /ajouter_prono ===
-
+// Commande /ajouter_prono
 bot.onText(/\/ajouter_prono/, (msg) => {
   const chatId = msg.chat.id;
   if (chatId !== ADMIN_ID)
@@ -1094,7 +1158,7 @@ bot.onText(/\/skip/, async (msg) => {
   const state = pendingCoupon[chatId];
   if (!state || state.step !== "awaiting_media") return;
 
-  await insertManualCoupon(state.content, null, null, state.date);
+  await insertManualCoupon(state.content, null, null, state.date, state.type);
   delete pendingCoupon[chatId];
   bot.sendMessage(chatId, "✅ Prono sans média enregistré.");
 });
@@ -1105,7 +1169,6 @@ bot.on("message", async (msg) => {
   const state = pendingCoupon[chatId];
   if (!state || msg.text?.startsWith("/")) return;
 
-  // Étape : date manuelle
   if (state.step === "awaiting_date" && /^\d{4}-\d{2}-\d{2}$/.test(msg.text)) {
     const inputDate = new Date(msg.text);
     const today = new Date();
@@ -1123,7 +1186,6 @@ bot.on("message", async (msg) => {
     return bot.sendMessage(chatId, "📝 Envoie maintenant le texte du prono.");
   }
 
-  // Étape : contenu
   if (state.step === "awaiting_content" && msg.text) {
     state.content = msg.text;
     state.step = "awaiting_confirmation";
@@ -1140,12 +1202,11 @@ bot.on("message", async (msg) => {
     });
   }
 
-  // Étape : ajout du média
   if (state.step === "awaiting_media") {
     if (msg.photo) {
       const fileId = msg.photo.at(-1).file_id;
       const fileUrl = await bot.getFileLink(fileId);
-      await insertManualCoupon(state.content, fileUrl, "photo", state.date);
+      await insertManualCoupon(state.content, fileUrl, "photo", state.date, state.type);
       delete pendingCoupon[chatId];
       return bot.sendMessage(chatId, "✅ Prono avec photo enregistré.");
     }
@@ -1153,7 +1214,7 @@ bot.on("message", async (msg) => {
     if (msg.video) {
       const fileId = msg.video.file_id;
       const fileUrl = await bot.getFileLink(fileId);
-      await insertManualCoupon(state.content, fileUrl, "video", state.date);
+      await insertManualCoupon(state.content, fileUrl, "video", state.date, state.type);
       delete pendingCoupon[chatId];
       return bot.sendMessage(chatId, "✅ Prono avec vidéo enregistré.");
     }
@@ -1166,21 +1227,22 @@ bot.on("message", async (msg) => {
   }
 });
 
-// Callback pour confirmer ou annuler
+// Callback pour confirmer, annuler, ou choisir le type
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
   const state = pendingCoupon[chatId];
   if (!state) return bot.answerCallbackQuery(query.id);
 
   if (query.data === "confirm_prono") {
-    state.step = "awaiting_media";
-    await bot.sendMessage(
-      chatId,
-      "📎 Tu peux maintenant envoyer une *photo* ou une *vidéo* pour ce prono.\nSinon tape /skip.",
-      {
-        parse_mode: "Markdown",
-      }
-    );
+    state.step = "awaiting_type"; // nouvelle étape pour choisir le type
+    await bot.sendMessage(chatId, "🎯 Choisis le type de prono :", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Gratuit", callback_data: "type_gratuit" }],
+          [{ text: "Premium", callback_data: "type_premium" }],
+        ],
+      },
+    });
   }
 
   if (query.data === "cancel_prono") {
@@ -1188,8 +1250,34 @@ bot.on("callback_query", async (query) => {
     await bot.sendMessage(chatId, "❌ Ajout du prono annulé.");
   }
 
+  if (state.step === "awaiting_type") {
+    if (query.data === "type_gratuit" || query.data === "type_premium") {
+      state.type = query.data === "type_gratuit" ? "gratuit" : "premium";
+      state.step = "awaiting_media";
+      await bot.sendMessage(
+        chatId,
+        "📎 Tu peux maintenant envoyer une *photo* ou une *vidéo* pour ce prono.\nSinon tape /skip.",
+        { parse_mode: "Markdown" }
+      );
+    }
+  }
+
   await bot.answerCallbackQuery(query.id);
 });
+
+// Fonction d’insertion en base, mise à jour pour prendre en compte le type
+async function insertManualCoupon(content, mediaUrl, mediaType, date, type = "gratuit") {
+  try {
+    await pool.query(
+      `INSERT INTO daily_pronos (content, media_url, media_type, date, date_only, type)
+       VALUES ($1, $2, $3, $4, $4::date, $5)`,
+      [content, mediaUrl, mediaType, date, type]
+    );
+  } catch (err) {
+    console.error("Erreur lors de l'insertion du prono :", err);
+  }
+}
+
 
 /////////////////////////////////////// ✅ VOIRE LES PRONOSTIQUE QUI SONT DISPO ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 //=== COMMANDE /voir_pronos ===
