@@ -1,9 +1,9 @@
-async function insertManualCoupon(chatId, content, mediaUrl, mediaType, date) {
+async function insertManualCoupon(chatId, content, mediaUrl, mediaType, date, type = "gratuit") {
   try {
     await pool.query(`
-      INSERT INTO daily_pronos (content, media_url, media_type, date)
-      VALUES ($1, $2, $3, $4)
-    `, [content, mediaUrl, mediaType, date]);
+      INSERT INTO daily_pronos (content, media_url, media_type, date, date_only, type)
+      VALUES ($1, $2, $3, $4, $4::date, $5)
+    `, [content, mediaUrl, mediaType, date, type]);
 
     if (mediaType === 'photo') {
       await bot.sendPhoto(chatId, mediaUrl, { caption: content });
@@ -13,9 +13,12 @@ async function insertManualCoupon(chatId, content, mediaUrl, mediaType, date) {
       await bot.sendMessage(chatId, content);
     }
 
-    await bot.sendMessage(chatId, `✅ Coupon ajouté pour le ${date}`);
+    await bot.sendMessage(chatId, `✅ Coupon *${type.toUpperCase()}* ajouté pour le ${date}`, {
+      parse_mode: "Markdown"
+    });
+
   } catch (err) {
     console.error("❌ Erreur lors de l'ajout manuel :", err);
-    bot.sendMessage(chatId, "❌ Erreur lors de l’ajout du coupon.");
+    await bot.sendMessage(chatId, "❌ Erreur lors de l’ajout du coupon.");
   }
 }
