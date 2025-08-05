@@ -11,7 +11,7 @@ const { formatMatchTips } = require("./couponUtils");
 const bot = require("./bot");
 
 const CHANNEL_ID = process.env.CHANNEL_ID;
-const BOT_LINK = process.env.BOT_LINK || "https://t.me/onexboom_bot";
+const BOT_LINK = process.env.BOT_LINK || "https://t.me/Official_1XBOOM_bot";
 
 module.exports = function setupAutoSender() {
   // ✅ Exécution toutes les minutes
