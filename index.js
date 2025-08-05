@@ -18,6 +18,8 @@ const generateCouponEurope = require('./generateCouponEurope');
 const generateCouponAfrica = require('./generateCouponAfrica');
 const generateCouponAmerica = require('./generateCouponAmerica');
 const generateCouponAsia = require('./generateCouponAsia');
+const { formatMatchTips } = require("./couponUtils");
+
 
 
 
@@ -2265,9 +2267,7 @@ bot.onText(/\/test/, (msg) => {
   bot.sendMessage(msg.chat.id, "Bot et serveur ✅ fonctionnels");
 });
 
-const { formatMatchTips } = require("./couponUtils");
 
-const ADMIN_ID = process.env.ADMIN_ID;
 
 // Commande /test_auto (admin uniquement)
 bot.onText(/\/test_auto/, async (msg) => {
