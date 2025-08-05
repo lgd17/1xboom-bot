@@ -1,7 +1,6 @@
 // ====== CHARGEMENT DES MODULES ======
 require("dotenv").config();
 //require('./server');
-require('./dailyCouponRunner');
 const TelegramBot = require("node-telegram-bot-api");
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -17,12 +16,6 @@ const generateCouponEurope = require('./generateCouponEurope');
 const generateCouponAfrica = require('./generateCouponAfrica');
 const generateCouponAmerica = require('./generateCouponAmerica');
 const generateCouponAsia = require('./generateCouponAsia');
-const {
-  getConfidence,
-  getSafestBet,
-  getTargetedBet,
-  formatMatchTips
-} = require('./couponUtils');
 
 
 
