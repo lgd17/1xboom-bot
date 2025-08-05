@@ -336,6 +336,7 @@ process.on("uncaughtException", (err) => {
 /////////////////////////////////////// ✅ VOIRE LE CLASSEMENT DE PARRAIN ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 //=== COMMANDE /topparrains ====
 
+
 bot.onText(/\/topparrains/, async (msg) => {
   const chatId = msg.chat.id;
 
@@ -358,9 +359,7 @@ bot.onText(/\/topparrains/, async (msg) => {
       const nom = row.username
         ? `@${row.username}`
         : row.firstname || "Anonyme";
-      message += `🥇 *${index + 1}. ${nom}* — ${row.filleuls} filleul(s), ${
-        row.points
-      } pts\n`;
+      message += `🥇 *${index + 1}. ${nom}* — ${row.filleuls} filleul(s), ${row.points} pts\n`;
     });
 
     bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
@@ -372,7 +371,11 @@ bot.onText(/\/topparrains/, async (msg) => {
 
 const CHANNEL_ID = "@linktree_free_prediction";
 
-schedule.scheduleJob("0 18 * * 0", async () => {
+// ✅ Classement automatique tous les dimanches à 18h (heure Lomé)
+schedule.scheduleJob({ hour: 18, minute: 0, dayOfWeek: 0 }, async () => {
+  const now = moment().tz('Africa/Lome').format("YYYY-MM-DD HH:mm:ss");
+  console.log("🕒 Envoi automatique Top 5 (hebdo) à :", now);
+
   try {
     const { rows } = await pool.query(`
       SELECT u1.id, u1.username, u1.firstname, COUNT(u2.id) AS filleuls, u1.points
@@ -390,10 +393,10 @@ schedule.scheduleJob("0 18 * * 0", async () => {
       const nom = row.username
         ? `@${row.username}`
         : row.firstname || "Anonyme";
-      message += `🏅 *${index + 1}. ${nom}* — ${row.filleuls} filleul(s), ${
-        row.points
-      } pts\n`;
+      message += `🏅 *${index + 1}. ${nom}* — ${row.filleuls} filleul(s), ${row.points} pts\n`;
     });
+
+    message += `\n🕒 Envoyé à ${moment().tz("Africa/Lome").format("HH:mm")} (heure Lomé)`;
 
     bot.sendMessage(CHANNEL_ID, message, { parse_mode: "Markdown" });
   } catch (error) {
@@ -401,19 +404,17 @@ schedule.scheduleJob("0 18 * * 0", async () => {
   }
 });
 
-// 🔁 Réinitialiser les points tous les 1er du mois à 00h05
+const TELEGRAM_CHANNEL_ID = "@linktree_free_prediction";
 
-const TELEGRAM_CHANNEL_ID = "@linktree_free_prediction"; // remplace par ton canal
-
-// 🔁 Fonction pour publier le Top 5 et reset les points
+// 🔁 Fonction pour publier le Top 5 mensuel et reset les points
 async function publierClassementEtReset() {
   try {
-    const { rows: topUsers } = await pool.query(
-      `SELECT id, username, firstname, points
-       FROM users
-       ORDER BY points DESC
-       LIMIT 5`
-    );
+    const { rows: topUsers } = await pool.query(`
+      SELECT id, username, firstname, points
+      FROM users
+      ORDER BY points DESC
+      LIMIT 5
+    `);
 
     if (topUsers.length === 0) {
       await bot.sendMessage(
@@ -437,11 +438,9 @@ async function publierClassementEtReset() {
 
     message += `\n🎁 Les récompenses seront distribuées automatiquement !
 
-
-        🚨 NOUVEAU MOIS = NOUVEAU DÉFI !
+🚨 NOUVEAU MOIS = NOUVEAU DÉFI !
 
 🥇 Tous les *points de parrainage* ont été remis à zéro !
-
 
 🔄 C’est le moment de te lancer à fond :
 - Invite tes amis 💬
@@ -454,23 +453,26 @@ async function publierClassementEtReset() {
 
 🔥 *Le compteur est reparti de zéro. Ne perds pas une seconde !*`;
 
-    // 🔹 Envoi du message dans le canal
+    // 🔹 Envoi dans le canal
     await bot.sendMessage(TELEGRAM_CHANNEL_ID, message, {
       parse_mode: "Markdown",
     });
 
-    // 🔹 Remise à zéro
+    // 🔹 Reset des points
     await pool.query("UPDATE users SET points = 0");
-    console.log("✅ Points remis à zéro");
+    console.log("✅ Points remis à zéro le", moment().tz("Africa/Lome").format("YYYY-MM-DD HH:mm:ss"));
   } catch (err) {
     console.error("❌ Erreur dans publierClassementEtReset :", err);
   }
 }
 
-// ✅ Tâche planifiée le 1er de chaque mois à 00h00
-schedule.scheduleJob("0 0 1 * *", () => {
+// ✅ Reset des points chaque 1er du mois à 00h00 (heure Lomé)
+schedule.scheduleJob({ hour: 0, minute: 0, date: 1 }, () => {
+  const now = moment().tz('Africa/Lome').format("YYYY-MM-DD HH:mm:ss");
+  console.log("📆 Début de la tâche mensuelle (reset points) à :", now);
   publierClassementEtReset();
 });
+
 
 // ✅ Commande admin pour tester à la main
 bot.onText(/\/resetpoints/, async (msg) => {
