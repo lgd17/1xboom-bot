@@ -2292,3 +2292,50 @@ bot.onText(/\/test/, (msg) => {
   bot.sendMessage(msg.chat.id, "Bot et serveur ✅ fonctionnels");
 });
 
+const { formatMatchTips } = require("./couponUtils");
+
+const ADMIN_ID = process.env.ADMIN_ID;
+
+// Commande /test_auto (admin uniquement)
+bot.onText(/\/test_auto/, async (msg) => {
+  const chatId = msg.chat.id;
+  if (String(chatId) !== String(ADMIN_ID)) {
+    return bot.sendMessage(chatId, "🚫 Commande réservée à l’admin.");
+  }
+
+  bot.sendMessage(chatId, "⏳ Génération automatique en cours...");
+
+  try {
+    const europe = await generateCouponEurope();
+    const africa = await generateCouponAfrica();
+    const america = await generateCouponAmerica();
+    const asia = await generateCouponAsia();
+
+    const allMatches = [...europe, ...africa, ...america, ...asia];
+
+    if (allMatches.length === 0) {
+      return bot.sendMessage(chatId, "❌ Aucun match généré.");
+    }
+
+    const message = formatMatchTips(allMatches);
+
+    // Insertion ou mise à jour dans la DB
+    await pool.query(`
+      INSERT INTO daily_pronos (date, matches, created_at)
+      VALUES (CURRENT_DATE, $1, NOW())
+      ON CONFLICT (date) DO UPDATE
+      SET matches = EXCLUDED.matches,
+          content = NULL,
+          media_url = NULL,
+          media_type = NULL,
+          created_at = NOW()
+    `, [JSON.stringify(allMatches)]);
+
+    await bot.sendMessage(chatId, `✅ *COUPON TEST INSÉRÉ ET ENVOYÉ :*\n\n${message}`, {
+      parse_mode: "Markdown",
+    });
+  } catch (err) {
+    console.error("❌ Erreur génération auto :", err);
+    bot.sendMessage(chatId, "❌ Erreur lors de la génération automatique.");
+  }
+});
