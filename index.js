@@ -7,6 +7,8 @@ const bodyParser = require("body-parser");
 const { t } = require("./lang");
 const cron = require("node-cron");
 require("./autoCoupons");
+process.env.TZ = 'Africa/Lome';
+const moment = require('moment-timezone');
 const schedule = require("node-schedule");
 const { pool, insertManualCoupon } = require("./db");
 const setupAutoSender = require("./autosender");
