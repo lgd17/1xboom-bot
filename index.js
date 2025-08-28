@@ -9,7 +9,7 @@ const fetch = require("node-fetch"); // utile si tu fais des appels API
 // ====== IMPORTS INTERNES ======
 const { app, bot } = require("./server");
 const { pool, insertManualCoupon } = require("./db");
-const setupAutoSender = require("./autosender");
+const setupAutoSender = require("./autoSend.js");
 setupAutoSender();
 require("./autoCoupons"); // conserve l’exécution automatique existante
 const generateCouponEurope = require("./generateCouponEurope");
