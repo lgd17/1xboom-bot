@@ -9,7 +9,7 @@ const {
 } = require("./autoSend");
 
 // ====== CONFIGURATION ENV ======
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000; // Render fournit le PORT automatiquement
 const token = process.env.TELEGRAM_TOKEN;
 if (!token) throw new Error("❌ TELEGRAM_TOKEN non défini !");
 const baseUrl = process.env.BASE_URL;
@@ -21,29 +21,23 @@ const encodedToken = encodeURIComponent(token);
 const app = express();
 app.use(bodyParser.json());
 
-// ====== INITIALISATION DU BOT EN MODE WEBHOOK ======
+// ====== INITIALISATION DU BOT TELEGRAM ======
 const bot = new TelegramBot(token, { webHook: true });
 bot.setWebHook(`${baseUrl}/bot${encodedToken}`)
   .then(() => console.log(`✅ Webhook configuré : ${baseUrl}/bot${encodedToken}`))
   .catch(err => console.error("❌ Erreur lors du setWebhook :", err));
 
-// ====== ROUTE POUR TRAITER LES UPDATES DE TELEGRAM ======
+// ====== ROUTES ======
 app.post(`/bot${encodedToken}`, (req, res) => {
-  console.log("✅ Webhook → Update reçu");
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// ====== ROUTE POUR RÉVEILLER RENDER ======
-app.get("/ping", (req, res) => {
-  console.log("✅ Ping reçu — Render réveillé");
-  res.status(200).send("Bot is awake!");
-});
+app.get("/ping", (req, res) => res.status(200).send("✅ Bot is awake!"));
 
-// ====== ROUTE DE TEST ======
-app.get("/", (req, res) => res.send("✅ Bot Telegram en ligne (mode webhook)"));
+app.get("/", (req, res) => res.send("✅ Bot Telegram en ligne"));
 
-// ====== ROUTES CRON ======
+// Routes Cron
 app.get("/cron-task/manual-coupon", async (req, res) => {
   try {
     await sendManualCoupon();
@@ -67,7 +61,7 @@ app.get("/cron-task/api-coupon", async (req, res) => {
 
 // ====== LANCEMENT SERVEUR ======
 app.listen(PORT, () => {
-  console.log(`🚀 Serveur lancé sur http://localhost:${PORT}`);
+  console.log(`🚀 Serveur lancé sur le port ${PORT}`);
 });
 
 // ====== EXPORTS ======
