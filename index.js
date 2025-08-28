@@ -1,45 +1,30 @@
 // ====== CHARGEMENT DES MODULES ======
 require("dotenv").config();
-//require('./server');
-const TelegramBot = require("node-telegram-bot-api");
-const express = require("express");
-const bodyParser = require("body-parser");
-const { t } = require("./lang");
-const cron = require("node-cron");
-require("./autoCoupons");
-process.env.TZ = 'Africa/Lome';
-const moment = require('moment-timezone');
+process.env.TZ = "Africa/Lome";
+
+const moment = require("moment-timezone");
 const schedule = require("node-schedule");
+const fetch = require("node-fetch"); // utile si tu fais des appels API
+
+// ====== IMPORTS INTERNES ======
+const { app, bot } = require("./server");
 const { pool, insertManualCoupon } = require("./db");
 const setupAutoSender = require("./autosender");
-setupAutoSender(); // Lance la tâc
-const fetch = require("node-fetch"); // à garder si tu fais des appels API
-const generateCouponEurope = require('./generateCouponEurope');
-const generateCouponAfrica = require('./generateCouponAfrica');
-const generateCouponAmerica = require('./generateCouponAmerica');
-const generateCouponAsia = require('./generateCouponAsia');
+setupAutoSender();
+require("./autoCoupons"); // conserve l’exécution automatique existante
+const generateCouponEurope = require("./generateCouponEurope");
+const generateCouponAfrica = require("./generateCouponAfrica");
+const generateCouponAmerica = require("./generateCouponAmerica");
+const generateCouponAsia = require("./generateCouponAsia");
 const { formatMatchTips } = require("./couponUtils");
-
-
-
-
-
-// ====== EXPRESS ======
-const app = express();
-app.use(bodyParser.json());
+const { t } = require("./lang");
 
 // ====== CONFIGURATION ENV ======
-const port = process.env.PORT || 3000;
-const token = process.env.TELEGRAM_TOKEN;
-if (!token) throw new Error("❌ TELEGRAM_TOKEN non défini !");
-const baseUrl = process.env.BASE_URL; // ✅ ✅ ✅ à utiliser sur Render !
-if (!baseUrl) throw new Error("❌ BASE_URL manquant dans .env !");
-
+const PORT = process.env.PORT || 3000;
 const adminId = process.env.TELEGRAM_ADMIN_ID;
 const channelId = process.env.TELEGRAM_CHANNEL_ID;
 
-
-// ====== GESTION DES ÉTATS ======
+// ====== VARIABLES D’ÉTAT (si besoin dans d’autres modules) ======
 const userStates = {};
 const ADMIN_IDS = [6248838967];
 const fixedDeletionConfirmations = new Map();
@@ -48,33 +33,6 @@ const userLang = {};
 const fixedAddStates = {};
 const fixedEditStates = {};
 const editStates = {};
-
-// ====== ENCODAGE DU TOKEN POUR L'URL ======
-const encodedToken = encodeURIComponent(token);
-
-// ====== INITIALISATION DU BOT EN MODE WEBHOOK ======
-const bot = new TelegramBot(token, { webHook: true });
-
-bot.setWebHook(`${baseUrl}/bot${encodedToken}`)
-  .then(() => console.log(`✅ Webhook configuré : ${baseUrl}/bot${encodedToken}`))
-  .catch(err => console.error("❌ Erreur lors du setWebhook :", err));
-
-
-// ====== ROUTE POUR TRAITER LES UPDATES DE TELEGRAM ======
-app.post(`/bot${encodedToken}`, (req, res) => {
-  console.log("✅ Webhook → Update reçu");
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-// ====== ROUTE POUR RÉVEILLER RENDER ======
-app.get("/ping", (req, res) => {
-  console.log("✅ Ping reçu — Render réveillé");
-  res.status(200).send("Bot is awake!");
-});
-
-// ====== PAGE DE TEST ======
-app.get("/", (req, res) => res.send("✅ Bot Telegram en ligne (mode webhook)"));
 
 // ====== LANCEMENT SERVEUR ======
 app.listen(port, () => {
