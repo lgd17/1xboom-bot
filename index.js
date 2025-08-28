@@ -34,11 +34,6 @@ const fixedAddStates = {};
 const fixedEditStates = {};
 const editStates = {};
 
-// ====== LANCEMENT SERVEUR ======
-app.listen(port, () => {
-  console.log(`🚀 Serveur lancé sur le port ${port}`);
-});
-
 // ====== ACTIVATION DE L’ENVOI AUTOMATIQUE FIXE ======
 setupAutoSender(bot);
 
