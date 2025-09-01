@@ -20,20 +20,28 @@ function sleep(ms) {
 
 // Envoi aux utilisateurs par batch pour éviter 429
 async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
-  console.log(`➡️ Envoi du message à ${users.length} utilisateurs`);
+  let success = 0;
+  let fail = 0;
+  const start = Date.now();
+
   for (let i = 0; i < users.length; i += batchSize) {
     const batch = users.slice(i, i + batchSize);
     await Promise.all(
       batch.map(async u => {
         try {
           await bot.sendMessage(u.telegram_id, message, { parse_mode: "Markdown" });
+          success++;
         } catch (err) {
           console.error(`⚠️ Erreur envoi à ${u.telegram_id}:`, err.message);
+          fail++;
         }
       })
     );
     if (i + batchSize < users.length) await sleep(delayMs);
   }
+
+  const durationSec = Math.round((Date.now() - start) / 1000);
+  return { success, fail, durationSec };
 }
 
 async function sendManualCoupon() {
@@ -67,7 +75,16 @@ async function sendManualCoupon() {
       CHANNEL_ID,
       `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot : ${BOT_LINK}`
     );
-
+ // Rapport pour l'ADMIN_ID
+await bot.sendMessage(
+  ADMIN_ID,
+  `✅ *Coupon envoyé*\n` +
+  `👥 Utilisateurs ciblés : *${users.length}*\n` +
+  `📨 Réussis : *${report.success}*\n` +
+  `⚠️ Échecs : *${report.fail}*\n` +
+  `⏱️ Durée : *${report.durationSec}s*`,
+  { parse_mode: "Markdown" }
+);
     console.log("✅ Coupon manuel envoyé avec succès");
   } catch (err) {
     console.error("❌ Erreur envoi manuel :", err);
@@ -160,37 +177,6 @@ async function cleanOldData() {
     await bot.sendMessage(process.env.ADMIN_ID, `❌ Erreur lors du nettoyage : ${err.message}`);
   }
 }
-
-// ==========================
-// 🚀 PLANIFICATION AUTOMATIQUE
-// ==========================
-
-// 06h15 (Lomé) → envoi manuel
-schedule.scheduleJob(
-  { hour: 6, minute: 15, tz: "Africa/Lome" },
-  async () => {
-    console.log("⏰ 06h15 - Tâche planifiée : envoi du coupon manuel");
-    await sendManualCoupon();
-  }
-);
-
-// 06h25 (Lomé) → nettoyage automatique
-schedule.scheduleJob(
-  { hour: 6, minute: 25, tz: "Africa/Lome" },
-  async () => {
-    console.log("⏰ 06h25 - Tâche planifiée : nettoyage automatique");
-    await cleanOldData();
-  }
-);
-
-// 07h15 (Lomé) → génération + envoi auto
-schedule.scheduleJob(
-  { hour: 7, minute: 15, tz: "Africa/Lome" },
-  async () => {
-    console.log("⏰ 07h15 - Tâche planifiée : génération et envoi du coupon auto");
-    await generateAndSendCoupon();
-  }
-);
 
 module.exports = {
   sendManualCoupon,
