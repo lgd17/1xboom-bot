@@ -10,7 +10,6 @@ const fetch = require("node-fetch"); // utile si tu fais des appels API
 const { app, bot } = require("./server");
 const { pool, insertManualCoupon } = require("./db");
 const { sendManualCoupon, generateAndSendCoupon, cleanOldData } = require("./autoSend");
-setupAutoSender(bot);
 require("./autoCoupons"); // conserve l’exécution automatique existante
 const generateCouponEurope = require("./generateCouponEurope");
 const generateCouponAfrica = require("./generateCouponAfrica");
@@ -33,9 +32,26 @@ const userLang = {};
 const fixedAddStates = {};
 const fixedEditStates = {};
 const editStates = {};
+//////////////////////// planifie envoi
 
-// ====== ACTIVATION DE L’ENVOI AUTOMATIQUE FIXE ======
-setupAutoSender(bot);
+// 06h15 Lomé → envoi manuel
+schedule.scheduleJob({ hour: 6, minute: 15, tz: "Africa/Lome" }, async () => {
+  console.log("⏰ 06h15 - Envoi du coupon manuel");
+  await sendManualCoupon();
+});
+
+// 06h25 Lomé → nettoyage automatique
+schedule.scheduleJob({ hour: 6, minute: 25, tz: "Africa/Lome" }, async () => {
+  console.log("⏰ 06h25 - Nettoyage des anciens pronos");
+  await cleanOldData();
+});
+
+// 07h15 Lomé → génération + envoi automatique
+schedule.scheduleJob({ hour: 7, minute: 15, tz: "Africa/Lome" }, async () => {
+  console.log("⏰ 07h15 - Génération + envoi du coupon auto");
+  await generateAndSendCoupon();
+});
+
 
 // ====== POSTGRESQL ======
 const { Pool } = require("pg");
