@@ -1,6 +1,8 @@
 // autoSend.js
+// autoSend.js
 const { pool } = require("./db");
 const moment = require("moment-timezone");
+const schedule = require("node-schedule");
 const generateCouponEurope = require("./generateCouponEurope");
 const generateCouponAfrica = require("./generateCouponAfrica");
 const generateCouponAmerica = require("./generateCouponAmerica");
@@ -18,12 +20,17 @@ function sleep(ms) {
 
 // Envoi aux utilisateurs par batch pour éviter 429
 async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
+  console.log(`➡️ Envoi du message à ${users.length} utilisateurs`);
   for (let i = 0; i < users.length; i += batchSize) {
     const batch = users.slice(i, i + batchSize);
     await Promise.all(
-      batch.map(u =>
-        bot.sendMessage(u.telegram_id, message, { parse_mode: "Markdown" })
-      )
+      batch.map(async u => {
+        try {
+          await bot.sendMessage(u.telegram_id, message, { parse_mode: "Markdown" });
+        } catch (err) {
+          console.error(`⚠️ Erreur envoi à ${u.telegram_id}:`, err.message);
+        }
+      })
     );
     if (i + batchSize < users.length) await sleep(delayMs);
   }
@@ -32,7 +39,10 @@ async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
 async function sendManualCoupon() {
   try {
     const { rows } = await pool.query(`SELECT * FROM daily_pronos WHERE date = CURRENT_DATE`);
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+      console.log("⚠️ Aucun coupon manuel trouvé pour aujourd’hui");
+      return;
+    }
 
     const coupon = rows[0];
     const matches = JSON.parse(coupon.matches || coupon.content || "[]");
@@ -40,10 +50,8 @@ async function sendManualCoupon() {
 
     const { rows: users } = await pool.query("SELECT telegram_id FROM verified_users");
 
-    // Envoi sécurisé aux utilisateurs
     await sendToUsers(users, `🎯*𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥*🎯\n\n${message}`);
 
-    // Enregistre les accès
     for (let user of users) {
       await pool.query(
         `
@@ -55,11 +63,12 @@ async function sendManualCoupon() {
       );
     }
 
-    // Notification channel
     await bot.sendMessage(
       CHANNEL_ID,
       `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot : ${BOT_LINK}`
     );
+
+    console.log("✅ Coupon manuel envoyé avec succès");
   } catch (err) {
     console.error("❌ Erreur envoi manuel :", err);
   }
@@ -68,7 +77,10 @@ async function sendManualCoupon() {
 async function generateAndSendCoupon() {
   try {
     const { rows } = await pool.query(`SELECT * FROM daily_pronos WHERE date = CURRENT_DATE`);
-    if (rows.length > 0) return;
+    if (rows.length > 0) {
+      console.log("⚠️ Coupon déjà généré aujourd’hui, envoi auto annulé");
+      return;
+    }
 
     const europe = await generateCouponEurope();
     const africa = await generateCouponAfrica();
@@ -76,7 +88,10 @@ async function generateAndSendCoupon() {
     const asia = await generateCouponAsia();
 
     const allMatches = [...europe, ...africa, ...america, ...asia];
-    if (allMatches.length === 0) return;
+    if (allMatches.length === 0) {
+      console.log("⚠️ Aucun match généré aujourd’hui");
+      return;
+    }
 
     await pool.query(
       `INSERT INTO daily_pronos (date, matches) VALUES (CURRENT_DATE, $1)`,
@@ -86,10 +101,8 @@ async function generateAndSendCoupon() {
     const message = formatMatchTips(allMatches);
     const { rows: users } = await pool.query("SELECT telegram_id FROM verified_users");
 
-    // Envoi sécurisé aux utilisateurs
     await sendToUsers(users, `🎯*𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥*🎯\n\n${message}`);
 
-    // Enregistre les accès
     for (let user of users) {
       await pool.query(
         `
@@ -101,11 +114,12 @@ async function generateAndSendCoupon() {
       );
     }
 
-    // Notification channel
     await bot.sendMessage(
       CHANNEL_ID,
       `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot : ${BOT_LINK}`
     );
+
+    console.log("✅ Coupon généré et envoyé avec succès");
   } catch (err) {
     console.error("❌ Erreur génération coupon API :", err);
   }
@@ -128,15 +142,46 @@ async function cleanOldData() {
     const message = `🧹 *Nettoyage automatique effectué*\n\n📅 Date : *${today}*\n🗑️ Pronostics supprimés : *${pronosDeleted}*\n👤 Accès supprimés : *${accessDeleted}*`;
 
     await bot.sendMessage(process.env.ADMIN_ID, message, { parse_mode: "Markdown" });
+    console.log("✅ Nettoyage terminé :", pronosDeleted, "pronos et", accessDeleted, "accès supprimés");
   } catch (err) {
     console.error("❌ Erreur de nettoyage :", err.message);
     await bot.sendMessage(process.env.ADMIN_ID, `❌ Erreur lors du nettoyage : ${err.message}`);
   }
 }
 
+// ==========================
+// 🚀 PLANIFICATION AUTOMATIQUE
+// ==========================
+
+// 06h15 (Lomé) → envoi manuel
+schedule.scheduleJob(
+  { hour: 6, minute: 15, tz: "Africa/Lome" },
+  async () => {
+    console.log("⏰ 06h15 - Tâche planifiée : envoi du coupon manuel");
+    await sendManualCoupon();
+  }
+);
+
+// 06h25 (Lomé) → nettoyage automatique
+schedule.scheduleJob(
+  { hour: 6, minute: 25, tz: "Africa/Lome" },
+  async () => {
+    console.log("⏰ 06h25 - Tâche planifiée : nettoyage automatique");
+    await cleanOldData();
+  }
+);
+
+// 07h15 (Lomé) → génération + envoi auto
+schedule.scheduleJob(
+  { hour: 7, minute: 15, tz: "Africa/Lome" },
+  async () => {
+    console.log("⏰ 07h15 - Tâche planifiée : génération et envoi du coupon auto");
+    await generateAndSendCoupon();
+  }
+);
+
 module.exports = {
   sendManualCoupon,
   generateAndSendCoupon,
   cleanOldData
 };
-
