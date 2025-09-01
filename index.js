@@ -32,27 +32,37 @@ const userLang = {};
 const fixedAddStates = {};
 const fixedEditStates = {};
 const editStates = {};
-//////////////////////// planifie envoi
 
-// 06h15 Lomé → envoi manuel
-schedule.scheduleJob({ hour: 6, minute: 15, tz: "Africa/Lome" }, async () => {
-  console.log("⏰ 06h15 - Envoi du coupon manuel");
-  await sendManualCoupon();
-});
+// ==========================
+// 🚀 PLANIFICATION AUTOMATIQUE
+// ==========================
 
-// 06h25 Lomé → nettoyage automatique
-schedule.scheduleJob({ hour: 6, minute: 25, tz: "Africa/Lome" }, async () => {
-  console.log("⏰ 06h25 - Nettoyage des anciens pronos");
-  await cleanOldData();
-});
+// 06h15 (Lomé) → envoi manuel
+schedule.scheduleJob(
+  { hour: 6, minute: 15, tz: "Africa/Lome" },
+  async () => {
+    console.log("⏰ 06h15 - Tâche planifiée : envoi du coupon manuel");
+    await sendManualCoupon();
+  }
+);
 
-// 07h15 Lomé → génération + envoi automatique
-schedule.scheduleJob({ hour: 7, minute: 15, tz: "Africa/Lome" }, async () => {
-  console.log("⏰ 07h15 - Génération + envoi du coupon auto");
-  await generateAndSendCoupon();
-});
+// 06h25 (Lomé) → nettoyage automatique
+schedule.scheduleJob(
+  { hour: 6, minute: 25, tz: "Africa/Lome" },
+  async () => {
+    console.log("⏰ 06h25 - Tâche planifiée : nettoyage automatique");
+    await cleanOldData();
+  }
+);
 
-
+// 07h15 (Lomé) → génération + envoi auto
+schedule.scheduleJob(
+  { hour: 7, minute: 15, tz: "Africa/Lome" },
+  async () => {
+    console.log("⏰ 07h15 - Tâche planifiée : génération et envoi du coupon auto");
+    await generateAndSendCoupon();
+  }
+);
 // ====== POSTGRESQL ======
 const { Pool } = require("pg");
 // --- /start + gestion parrainage + points ---
