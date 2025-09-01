@@ -10,6 +10,7 @@ const fetch = require("node-fetch"); // utile si tu fais des appels API
 const { app, bot } = require("./server");
 const { pool, insertManualCoupon } = require("./db");
 const { sendManualCoupon, generateAndSendCoupon, cleanOldData } = require("./autoSend");
+const { ping } = require("./pingServer")
 require("./autoCoupons"); // conserve l’exécution automatique existante
 const generateCouponEurope = require("./generateCouponEurope");
 const generateCouponAfrica = require("./generateCouponAfrica");
@@ -63,6 +64,16 @@ schedule.scheduleJob(
     await generateAndSendCoupon();
   }
 );
+
+
+// ============================
+// Ping automatique toutes les 14 minutes
+// ============================
+ping(); // ping immédiat au démarrage
+setInterval(ping, 1 * 60 * 1000); // répéter toutes les 14 minutes
+
+
+
 // ====== POSTGRESQL ======
 const { Pool } = require("pg");
 // --- /start + gestion parrainage + points ---
