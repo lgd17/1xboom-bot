@@ -119,11 +119,23 @@ async function generateAndSendCoupon() {
       `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot : ${BOT_LINK}`
     );
 
+    // Rapport pour l'ADMIN_ID
+await bot.sendMessage(
+  ADMIN_ID,
+  `✅ *Coupon envoyé*\n` +
+  `👥 Utilisateurs ciblés : *${users.length}*\n` +
+  `📨 Réussis : *${report.success}*\n` +
+  `⚠️ Échecs : *${report.fail}*\n` +
+  `⏱️ Durée : *${report.durationSec}s*`,
+  { parse_mode: "Markdown" }
+);
+
     console.log("✅ Coupon généré et envoyé avec succès");
   } catch (err) {
     console.error("❌ Erreur génération coupon API :", err);
   }
 }
+
 
 async function cleanOldData() {
   try {
