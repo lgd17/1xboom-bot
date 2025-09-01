@@ -70,7 +70,7 @@ schedule.scheduleJob(
 // Ping automatique toutes les 14 minutes
 // ============================
 ping(); // ping immédiat au démarrage
-setInterval(ping, 1 * 60 * 1000); // répéter toutes les 14 minutes
+setInterval(ping, 14 * 60 * 1000); // répéter toutes les 14 minutes
 
 
 
