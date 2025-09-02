@@ -1,8 +1,6 @@
 // autoSend.js
-// autoSend.js
 const { pool } = require("./db");
 const moment = require("moment-timezone");
-const schedule = require("node-schedule");
 const generateCouponEurope = require("./generateCouponEurope");
 const generateCouponAfrica = require("./generateCouponAfrica");
 const generateCouponAmerica = require("./generateCouponAmerica");
@@ -11,6 +9,7 @@ const { formatMatchTips } = require("./couponUtils");
 const bot = require("./bot");
 
 const CHANNEL_ID = process.env.CHANNEL_ID;
+const ADMIN_ID = process.env.ADMIN_ID;
 const BOT_LINK = process.env.BOT_LINK || "https://t.me/Official_1XBOOM_bot";
 
 // Petite fonction sleep pour limiter le rythme d’envoi
@@ -18,7 +17,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Envoi aux utilisateurs par batch pour éviter 429
+// Envoi aux utilisateurs par batch (texte ou média)
 async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
   let success = 0;
   let fail = 0;
@@ -29,7 +28,14 @@ async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
     await Promise.all(
       batch.map(async u => {
         try {
-          await bot.sendMessage(u.telegram_id, message, { parse_mode: "Markdown" });
+          if (typeof message === "string") {
+            await bot.sendMessage(u.telegram_id, message, { parse_mode: "Markdown" });
+          } else if (message.type === "photo") {
+            await bot.sendPhoto(u.telegram_id, message.media, {
+              caption: message.caption,
+              parse_mode: "Markdown"
+            });
+          }
           success++;
         } catch (err) {
           console.error(`⚠️ Erreur envoi à ${u.telegram_id}:`, err.message);
@@ -44,21 +50,35 @@ async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
   return { success, fail, durationSec };
 }
 
+// Envoi manuel
 async function sendManualCoupon() {
   try {
-    const { rows } = await pool.query(`SELECT * FROM daily_pronos WHERE date = CURRENT_DATE`);
+    const { rows } = await pool.query(
+      `SELECT * FROM daily_pronos WHERE date_only = CURRENT_DATE AND type = 'gratuit' LIMIT 1`
+    );
     if (rows.length === 0) {
       console.log("⚠️ Aucun coupon manuel trouvé pour aujourd’hui");
       return;
     }
 
     const coupon = rows[0];
-    const matches = JSON.parse(coupon.matches || coupon.content || "[]");
-    const message = formatMatchTips(matches);
+    let message;
+
+    if (coupon.media_url && coupon.media_type === "photo") {
+      message = {
+        type: "photo",
+        media: coupon.media_url,
+        caption: coupon.content || "🎯 *Coupon du jour* 🎯"
+      };
+    } else {
+      const matches = coupon.matches ? JSON.parse(coupon.matches) : [];
+      const textContent = coupon.content || formatMatchTips(matches);
+      message = `🎯 *𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥* 🎯\n\n${textContent}`;
+    }
 
     const { rows: users } = await pool.query("SELECT telegram_id FROM verified_users");
 
-    await sendToUsers(users, `🎯*𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥*🎯\n\n${message}`);
+    const report = await sendToUsers(users, message);
 
     for (let user of users) {
       await pool.query(
@@ -71,29 +91,39 @@ async function sendManualCoupon() {
       );
     }
 
-    await bot.sendMessage(
-      CHANNEL_ID,
-      `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot : ${BOT_LINK}`
-    );
- // Rapport pour l'ADMIN_ID
-await bot.sendMessage(
-  ADMIN_ID,
-  `✅ *Coupon envoyé*\n` +
-  `👥 Utilisateurs ciblés : *${users.length}*\n` +
-  `📨 Réussis : *${report.success}*\n` +
-  `⚠️ Échecs : *${report.fail}*\n` +
-  `⏱️ Durée : *${report.durationSec}s*`,
-  { parse_mode: "Markdown" }
-);
+    // Notification canal → avec image si dispo
+    if (coupon.media_url && coupon.media_type === "photo") {
+      await bot.sendPhoto(CHANNEL_ID, coupon.media_url, {
+        caption: `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot : ${BOT_LINK}`
+      });
+    } else {
+      await bot.sendMessage(
+        CHANNEL_ID,
+        `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot : ${BOT_LINK}`
+      );
+    }
+
+    // Rapport ADMIN_ID
+    if (ADMIN_ID) {
+      await bot.sendMessage(
+        ADMIN_ID,
+        `✅ *Coupon envoyé*\n👥 Utilisateurs : *${users.length}*\n📨 Réussis : *${report.success}*\n⚠️ Échecs : *${report.fail}*\n⏱️ Durée : *${report.durationSec}s*`,
+        { parse_mode: "Markdown" }
+      );
+    }
+
     console.log("✅ Coupon manuel envoyé avec succès");
   } catch (err) {
     console.error("❌ Erreur envoi manuel :", err);
   }
 }
 
+// Génération + envoi auto
 async function generateAndSendCoupon() {
   try {
-    const { rows } = await pool.query(`SELECT * FROM daily_pronos WHERE date = CURRENT_DATE`);
+    const { rows } = await pool.query(
+      `SELECT * FROM daily_pronos WHERE date_only = CURRENT_DATE AND type = 'gratuit'`
+    );
     if (rows.length > 0) {
       console.log("⚠️ Coupon déjà généré aujourd’hui, envoi auto annulé");
       return;
@@ -111,14 +141,14 @@ async function generateAndSendCoupon() {
     }
 
     await pool.query(
-      `INSERT INTO daily_pronos (date, matches) VALUES (CURRENT_DATE, $1)`,
+      `INSERT INTO daily_pronos (matches, type) VALUES ($1, 'gratuit')`,
       [JSON.stringify(allMatches)]
     );
 
-    const message = formatMatchTips(allMatches);
+    const message = `🎯 *𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥* 🎯\n\n${formatMatchTips(allMatches)}`;
     const { rows: users } = await pool.query("SELECT telegram_id FROM verified_users");
 
-    await sendToUsers(users, `🎯*𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥*🎯\n\n${message}`);
+    const report = await sendToUsers(users, message);
 
     for (let user of users) {
       await pool.query(
@@ -136,16 +166,13 @@ async function generateAndSendCoupon() {
       `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot : ${BOT_LINK}`
     );
 
-    // Rapport pour l'ADMIN_ID
-await bot.sendMessage(
-  ADMIN_ID,
-  `✅ *Coupon envoyé*\n` +
-  `👥 Utilisateurs ciblés : *${users.length}*\n` +
-  `📨 Réussis : *${report.success}*\n` +
-  `⚠️ Échecs : *${report.fail}*\n` +
-  `⏱️ Durée : *${report.durationSec}s*`,
-  { parse_mode: "Markdown" }
-);
+    if (ADMIN_ID) {
+      await bot.sendMessage(
+        ADMIN_ID,
+        `✅ *Coupon généré et envoyé*\n👥 Utilisateurs : *${users.length}*\n📨 Réussis : *${report.success}*\n⚠️ Échecs : *${report.fail}*\n⏱️ Durée : *${report.durationSec}s*`,
+        { parse_mode: "Markdown" }
+      );
+    }
 
     console.log("✅ Coupon généré et envoyé avec succès");
   } catch (err) {
@@ -153,13 +180,13 @@ await bot.sendMessage(
   }
 }
 
-
+// Nettoyage auto
 async function cleanOldData() {
   try {
     const { rowCount: pronosDeleted } = await pool.query(`
       DELETE FROM daily_pronos
       WHERE created_at < NOW() - INTERVAL '3 days'
-      AND date < CURRENT_DATE
+      AND date_only < CURRENT_DATE
     `);
 
     const { rowCount: accessDeleted } = await pool.query(`
@@ -170,11 +197,16 @@ async function cleanOldData() {
     const today = moment().tz("Africa/Lome").format("YYYY-MM-DD");
     const message = `🧹 *Nettoyage automatique effectué*\n\n📅 Date : *${today}*\n🗑️ Pronostics supprimés : *${pronosDeleted}*\n👤 Accès supprimés : *${accessDeleted}*`;
 
-    await bot.sendMessage(process.env.ADMIN_ID, message, { parse_mode: "Markdown" });
+    if (ADMIN_ID) {
+      await bot.sendMessage(ADMIN_ID, message, { parse_mode: "Markdown" });
+    }
+
     console.log("✅ Nettoyage terminé :", pronosDeleted, "pronos et", accessDeleted, "accès supprimés");
   } catch (err) {
     console.error("❌ Erreur de nettoyage :", err.message);
-    await bot.sendMessage(process.env.ADMIN_ID, `❌ Erreur lors du nettoyage : ${err.message}`);
+    if (ADMIN_ID) {
+      await bot.sendMessage(ADMIN_ID, `❌ Erreur lors du nettoyage : ${err.message}`);
+    }
   }
 }
 
