@@ -13,14 +13,13 @@ async function ping() {
       // await bot.sendMessage(ADMIN_ID, `✅ Ping réussi - Status: ${res.status}`);
     } else {
       console.warn(`⚠️ Ping échoué - Status: ${res.status}`);
-      await bot.sendMessage(ADMIN_ID, `⚠️ Ping échoué - Status: ${res.status}`);
+      if (ADMIN_ID) await bot.sendMessage(ADMIN_ID, `⚠️ Ping échoué - Status: ${res.status}`);
     }
   } catch (err) {
     console.error("❌ Erreur ping :", err.message);
-    await bot.sendMessage(ADMIN_ID, `❌ Erreur ping : ${err.message}`);
+    if (ADMIN_ID) await bot.sendMessage(ADMIN_ID, `❌ Erreur ping : ${err.message}`);
   }
 }
 
 // Exporter la fonction pour index.js
 module.exports = { ping };
-
