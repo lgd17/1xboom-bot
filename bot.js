@@ -6,7 +6,7 @@ const ADMIN_ID = process.env.ADMIN_ID;
 
 
 
-onst bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { webHook: { port: 443 } });
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { webHook: { port: 443 } });
 
 
 module.exports = bot;
