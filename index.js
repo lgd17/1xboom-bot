@@ -694,7 +694,7 @@ bot.on("callback_query", async (query) => {
 
 //==============================FONCTION POUR MESSAGE_AUTO
 
-const dayjs = require("dayjs");
+
 
 bot.onText(/\/addmsg/, (msg) => {
   if (msg.from.id.toString() !== adminId) {
