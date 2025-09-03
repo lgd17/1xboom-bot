@@ -10,12 +10,6 @@ const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, {
   webHook: { port: process.env.PORT || 10000, host: "0.0.0.0" }
 });
 
-// Définition de l’URL du webhook
-const WEBHOOK_URL = `${process.env.WEBHOOK_BASE_URL}/bot${process.env.TELEGRAM_TOKEN}`;
-bot.setWebHook(WEBHOOK_URL)
-  .then(() => console.log(`✅ Webhook configuré : ${WEBHOOK_URL}`))
-  .catch(err => console.error("❌ Erreur webhook :", err.message));
-
 
 module.exports = bot;
 
