@@ -130,7 +130,8 @@ bot.onText(/\/start(?:\s(\d+))?/, async (msg, match) => {
     console.error("Erreur lors du /start :", err);
     await bot.sendMessage(chatId, "❌ Une erreur est survenue.");
   }
-/*
+
+    /*
   // Envoie menu principal (ne pas oublier de gérer le conflit avec /start regex du début)
   sendMainMenu(chatId);
 });
