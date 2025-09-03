@@ -131,203 +131,7 @@ bot.onText(/\/start(?:\s(\d+))?/, async (msg, match) => {
     await bot.sendMessage(chatId, "❌ Une erreur est survenue.");
   }
 
-    /*
-  // Envoie menu principal (ne pas oublier de gérer le conflit avec /start regex du début)
-  sendMainMenu(chatId);
-});
-
-// --- Fonction pour vérifier si utilisateur est dans le canal ---
-async function isUserInChannel(userId, channelUsername) {
-  try {
-    const member = await bot.getChatMember(channelUsername, userId);
-    return ["member", "administrator", "creator"].includes(member.status);
-  } catch (err) {
-    console.error("Erreur vérification canal:", err);
-    return false;
-  }
-}
-
-//async function sendMainMenu(chatId) {
-async function sendMainMenu(chatId) {
-  try {
-    const res = await pool.query(
-      "SELECT * FROM verified_users WHERE telegram_id = $1",
-      [chatId]
-    );
-
-    const isVerified = res.rows.length > 0;
-
-    const keyboard = isVerified
-      ? [
-          ["🏆 Mes Points"],
-          ["🤝 Parrainage", "🆘 Assistance 🤖"],
-        ]
-      : [["🎯 Pronostics du jour"]];
-
-    const message = isVerified
-      ? "Bienvenue sur *1XBOOM* ! "
-      : "Clique sur le bouton 🎯 Pronostics du jour pour accéder aux pronostics.";
-
-    const menu = {
-      reply_markup: {
-        keyboard,
-        resize_keyboard: true,
-        one_time_keyboard: false,
-      },
-      parse_mode: "Markdown",
-    };
-
-    await bot.sendMessage(chatId, message, menu);
-  } catch (err) {
-    console.error("Erreur menu :", err);
-    bot.sendMessage(chatId, "❌ Une erreur est survenue lors du chargement du menu.");
-  }
-}
-
-
-// --- /start pour afficher le menu ---
-bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-  await sendMainMenu(chatId);
-});
-
-// --- Gestion des messages texte ---
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text?.trim();
-
-  if (!text || text.startsWith("/")) return;
-
-  // Parrainage
-  if (text === "🤝 Parrainage") {
-    const botInfo = await bot.getMe();
-    const referralLink = `https://t.me/${botInfo.username}?start=${chatId}`;
-
-    const message = `
-🚀 *Parraine et gagne avec P999X !*
-
-👥 *1. Invite un ami à notre canal :*  
-👉 [Rejoins le canal officiel](https://t.me/linktree_free_prediction)  
-➡️ Gagne +10 points s’il s’abonne !
-
-🎯 *2. Partage ton lien personnel d’invitation au bot :*  
-\`${referralLink}\`  
-➡️ Gagne +5 points s’il s’inscrit via ce lien !
-
-🎁 *Récompenses chaque fin du mois :*  
-🏆 Les *Top 5 parrains* gagnent :  
-- 10 000 FC chacun 💸  
-- 2 *coupons exclusifs* 🎫
-
-📢 Plus tu partages, plus tu gagnes.  
-🔥 Deviens notre meilleur ambassadeur !`;
-
-    return bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
-  }
-
-  // Mes Points
-  if (text === "🏆 Mes Points") {
-    try {
-      const res = await pool.query('SELECT points FROM users WHERE telegram_id = $1', [chatId]);
-      let points = 0;
-      if (res.rows.length > 0 && res.rows[0].points) points = res.rows[0].points;
-
-      let motivation = '';
-      if (points >= 100) motivation = "🚀 *Incroyable ! Tu es dans la cour des grands.*";
-      else if (points >= 50) motivation = "🔥 *Très bon score !* Continue !";
-      else if (points >= 20) motivation = "👍 *Bien joué !* Tu montes dans le classement.";
-      else motivation = "💡 Gagne des points en parrainant. Clique sur '🤝 Parrainage'";
-
-      return bot.sendMessage(chatId, `⭐️ *Tes points :* ${points} points\n\n${motivation}`, { parse_mode: "Markdown" });
-    } catch (err) {
-      console.error(err);
-      return bot.sendMessage(chatId, "❌ Erreur lors de la récupération des points.");
-    }
-  }
-
-  // Assistance
-  if (text === "🆘 Assistance 🤖") {
-    return bot.sendMessage(chatId, "🤖 Choisis une option :", {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "🎯 Pronostics du jour", callback_data: "pronostics" }],
-          [{ text: "🏆 Mes Points", callback_data: "points" }],
-          [{ text: "🤝 Parrainage", callback_data: "parrainage" }],
-          [{ text: "🆘 Assistance", callback_data: "assistance" }],
-        ],
-      },
-    });
-  }
-
-  // Autres messages ignorés ou gérés ailleurs
-});
-
-// --- Gestion des callbacks inline (boutons assistance) ---
-bot.on("callback_query", async (query) => {
-  const chatId = query.message.chat.id;
-  const data = query.data;
-
-  await bot.answerCallbackQuery(query.id);
-
-  const assistanceTexts = {
-    pronostics: `🎯 *Pronostics du jour*\n\nTu veux accéder à nos *coupons exclusifs du jour* ? Voici comment faire 👇
-
-1️⃣ *Inscris-toi sur un bookmaker* avec le *code promo : P999X*  
-2️⃣ *Dépose au moins 2000 FCFA / 5 $*  
-3️⃣ Clique sur 🎯 Pronostics et suis les étapes.
-
-🛂 Après vérification, tu accéderas à tous les pronostics chaque jour.  
-Merci pour ta confiance 🍀`,
-
-    points: `🏆 *Mes Points*\n\nConsulte ton solde de points grâce au parrainage et ta fidélité.  
-Plus tu invites, plus tu gagnes !`,
-
-    parrainage: `🤝 *Parrainage*\n\nInvite tes amis à rejoindre le canal et le bot.  
-Tu gagnes des points quand ils s’abonnent ou s’inscrivent via ton lien.`,
-
-    assistance: `🆘 *Besoin d’aide ?*\n\n📨 *Contact :* @Catkatii  
-🕘 *Heures :* Lundi - Samedi (8h à 22h) | Dimanche (10h à 18h)
-
-Pose ta question à tout moment. On te répondra vite 💙`,
-  };
-
-  if (assistanceTexts[data]) {
-    return bot.sendMessage(chatId, assistanceTexts[data], {
-      parse_mode: "Markdown",
-      disable_web_page_preview: true,
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "🔙 Retour", callback_data: "menu_assistance" }],
-        ],
-      },
-    });
-  }
-
-  if (data === "menu_assistance") {
-    return bot.sendMessage(chatId, "🤖 Choisis une option :", {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "🎯 Pronostics du jour", callback_data: "pronostics" }],
-          [{ text: "🏆 Mes Points", callback_data: "points" }],
-          [{ text: "🤝 Parrainage", callback_data: "parrainage" }],
-          [{ text: "🆘 Assistance", callback_data: "assistance" }],
-        ],
-      },
-    });
-  }
-
-  // Si callback non géré
-  console.warn("⚠️ Option inconnue callback_query:", data);
-});
-
-// --- Gestion erreurs globales ---
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection:", reason);
-});
-
-process.on("uncaughtException", (err) => {
-  console.error("Uncaught Exception:", err);
-});
+  
 
 /////////////////////////////////////// ✅ VOIRE LE CLASSEMENT DE PARRAIN ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 //=== COMMANDE /topparrains ====
@@ -555,228 +359,8 @@ async function envoyerMessageComplet(bot, chatId, message) {
 }
 
 
-/*
 /////////////////////////////////////// ✅ VOIRE LES VÉRIFICATIONS EN ATTENTE ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 // === COMMANDES ===
-bot.onText(/\/admin/, async (msg) => {
-  if (!ADMIN_IDS.includes(msg.from.id)) return;
-
-  try {
-    const { rows } = await pool.query("SELECT * FROM pending_verifications");
-    if (rows.length === 0)
-      return bot.sendMessage(msg.chat.id, "✅ Aucune vérification en attente.");
-
-    for (const row of rows) {
-      const text = `🧾 <b>Nouvelle demande</b>\n👤 @${row.username} (ID: ${row.telegram_id})\n📱 Bookmaker: ${row.bookmaker}\n💰 Montant: ${row.amount} FCFA\n🆔 Dépôt: <code>${row.deposit_id}</code>`;
-
-      const opts = {
-        parse_mode: "HTML",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "✅ Valider", callback_data: `validate_${row.telegram_id}` },
-              { text: "❌ Rejeter", callback_data: `reject_${row.telegram_id}` }
-            ]
-          ]
-        }
-      };
-
-      await bot.sendMessage(msg.chat.id, text, opts);
-    }
-  } catch (err) {
-    console.error("Erreur /admin:", err);
-  }
-});
-
-const pendingCustomRejects = {}; // Pour stocker les ID en attente de motif personnalisé
-
-bot.on("callback_query", async (query) => {
-  const chatId = query.message.chat.id;
-  const adminId = query.from.id;
-
-  if (!ADMIN_IDS.includes(adminId)) return;
-
-  const data = query.data;
-
-  if (data.startsWith("validate_")) {
-    const telegramId = data.split("_")[1];
-
-    try {
-      const { rows } = await pool.query("SELECT * FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
-      if (rows.length === 0) return;
-
-      const user = rows[0];
-
-      await pool.query("INSERT INTO verified_users (telegram_id, username, bookmaker, deposit_id, amount) VALUES ($1,$2,$3,$4,$5)", [
-        user.telegram_id,
-        user.username,
-        user.bookmaker,
-        user.deposit_id,
-        user.amount
-      ]);
-
-     await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
-
-await bot.sendMessage(user.telegram_id, `✅ Ton compte a été validé avec succès !`, {
-  reply_markup: {
-    keyboard: [["🎯 Pronostics du jour"]],
-    resize_keyboard: true,
-    remove_keyboard: true
-  }
-});
-
-await bot.sendMessage(chatId, `✅ Validation de @${user.username} confirmée.`);
-} catch (err) {
-      console.error("Erreur de validation:", err);
-    }
-  }
-
-
-  if (data.startsWith("reject_")) {
-    const telegramId = data.split("_")[1];
-
-    const motifs = [
-      [{ text: "🔻 Dépôt insuffisant", callback_data: `motif1_${telegramId}` }],
-      [{ text: "⛔️ ID non lié au code P999X", callback_data: `motif2_${telegramId}` }],
-      [{ text: "📝 Autres raisons", callback_data: `motif3_${telegramId}` }]
-    ];
-
-    return bot.editMessageReplyMarkup(
-      { inline_keyboard: motifs },
-      { chat_id: chatId, message_id: query.message.message_id }
-    );
-  }
-
-  if (data.startsWith("motif1_") || data.startsWith("motif2_")) {
-    const [motif, telegramId] = data.split("_");
-    const reason =
-      motif === "motif1"
-        ? "❌ Rejeté : dépôt insuffisant."
-        : "❌ Rejeté : cet ID de dépôt n’est pas lié au code promo P999X.";
-
-    await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
-
-    await bot.sendMessage(telegramId, reason);
-    await bot.sendMessage(telegramId, `🔁 Tu peux recommencer la procédure.`, {
-      reply_markup: {
-        keyboard: [["🔁 recommencer"]],
-        resize_keyboard: true,
-        one_time_keyboard: true
-      }
-    });
-
-    return bot.sendMessage(chatId, `🚫 Rejet envoyé à l'utilisateur.`);
-  }
-
-  if (data.startsWith("motif3_")) {
-    const telegramId = data.split("_")[1];
-
-    pendingCustomRejects[adminId] = telegramId;
-
-    return bot.sendMessage(chatId, "✍️ Envoie manuellement le motif de rejet pour l’utilisateur.");
-  }
-});
-
-// Réception d’un motif personnalisé
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text?.trim();
-
-  // 🔁 recommencer
-  if (text === "🔁 recommencer") {
-    userStates[chatId] = { step: "await_bookmaker" };
-
-    return bot.sendMessage(chatId, "🔐 Pour accéder aux pronostics, indique ton bookmaker :", {
-      reply_markup: {
-        keyboard: [["1xbet", "888starz"], ["melbet", "winwin"]],
-        resize_keyboard: true,
-        one_time_keyboard: true
-      }
-    });
-  }
-
-  if (text === "🆘 contacter l'assistance") {
-    return bot.sendMessage(chatId, "📩 Contacte notre équipe ici : [@Support_1XBOOM](https://t.me/Catkatii)", {
-      parse_mode: "Markdown",
-      disable_web_page_preview: true
-    });
-  }
-
-
-
-bot.on("callback_query", async (query) => {
-  const chatId = query.message.chat.id;
-  const messageId = query.message.message_id;
-
-  if (query.data === "get_prono") {
-    try {
-      // Supprime le bouton inline après clic
-      await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId });
-
-      // Récupère la date du jour au format YYYY-MM-DD
-      const today = new Date().toISOString().slice(0, 10);
-
-      // Recherche le coupon du jour
-      const res = await pool.query(
-        "SELECT content FROM daily_pronos WHERE date = $1 LIMIT 1",
-        [today]
-      );
-
-      if (res.rows.length === 0) {
-        await bot.sendMessage(chatId, "⚠️ Le pronostic du jour n'est pas encore disponible.");
-      } else {
-        const coupon = res.rows[0].content;
-
-        // Envoie le coupon du jour
-        await bot.sendMessage(chatId, `🎯 Pronostic du jour :\n\n${coupon}`, {
-          parse_mode: "Markdown"
-        });
-
-        // Affiche le menu principal avec 3 boutons
-        await bot.sendMessage(chatId, "📋 Menu principal :", {
-          reply_markup: {
-            keyboard: [["🏆 Mes Points", "🤝 Parrainage"], ["🆘 Assistance"]
-            ],
-            resize_keyboard: true
-          }
-        });
-      }
-    } catch (error) {
-      console.error("Erreur lors de l'envoi du pronostic :", error);
-      await bot.sendMessage(chatId, "❌ Une erreur est survenue, réessaie plus tard.");
-    }
-  }
-});
-
-  // Gestion du motif personnalisé
-  const pendingId = pendingCustomRejects[chatId];
-  if (pendingId) {
-    try {
-      await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [pendingId]);
-
-      await bot.sendMessage(pendingId, `❌ Rejeté : ${text}`);
-      await bot.sendMessage(
-        pendingId,
-        `🔁 Tu peux recommencer la procédure ou contacter l’assistance.`,
-        {
-          reply_markup: {
-            keyboard: [["🔁 recommencer", "🆘 contacter l'assistance"]],
-            resize_keyboard: true,
-            one_time_keyboard: true
-          }
-        }
-      );
-
-      await bot.sendMessage(chatId, `🔔 Motif personnalisé envoyé à l’utilisateur.`);
-    } catch (err) {
-      console.error("Erreur motif personnalisé :", err);
-      await bot.sendMessage(chatId, "❌ Une erreur est survenue lors du rejet.");
-    }
-
-    delete pendingCustomRejects[chatId];
-  }
-});
-
 
 //////////////////////////////////////////////////////// ENVI AUTOMATIQUE DES COUPON DU JOUR \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
@@ -787,7 +371,7 @@ let pendingCoupon = {};
 const { Client } = require("pg");
 const dayjs = require("dayjs");
 
-/*
+
 /////////////////////////////////////// ✅ VOIRE LES VÉRIFICATIONS EN ATTENTE ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 // Commande /ajouter_prono
 bot.onText(/\/ajouter_prono/, (msg) => {
@@ -927,7 +511,7 @@ bot.on("callback_query", async (query) => {
   await bot.answerCallbackQuery(query.id);
 });
 
-/*
+
 /////////////////////////////////////// ✅ VOIRE LES PRONOSTIQUE QUI SONT DISPO ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 //=== COMMANDE /voir_pronos ===
 
@@ -1107,7 +691,7 @@ bot.on("callback_query", async (query) => {
   }
 });
 
-/*
+
 //==============================FONCTION POUR MESSAGE_AUTO
 const { Client } = require("pg");
 const dayjs = require("dayjs");
@@ -1352,7 +936,7 @@ bot.on("callback_query", async (query) => {
   bot.answerCallbackQuery(query.id); // Pour faire disparaître le loading
 });
 
-/*
+
 /////////////////////////////////////// ✅ AJOUTER DES  MESSAGES_AUTO-FIXES ✅\\\\\\\\\\\\\\\\\\\\
 //=== COMMANDE /addfixedmsg =====
 
@@ -1691,7 +1275,7 @@ bot.on("callback_query", async (query) => {
   }
 });
 
-/*
+
 /////////////////////////////////////// ✅ AFFICHÉ LA LISTE DES  MESSAGES_AUTO-FIXES ✅\\\\\\\\\\\\\\\\\\\\
 //=== COMMANDE /fixedmenu ===
 
@@ -1818,7 +1402,7 @@ bot.on("message", async (msg) => {
   }
 });
 
-/*
+
 //////////////////////////////////////// Taux de change (exemple)\\\\\\\\\\\\\\\\\\\\\\\\\\
 const rates = {
   FCFA: 1, XOF: 1, CFA: 1,
