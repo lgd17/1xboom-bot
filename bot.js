@@ -691,8 +691,6 @@ bot.onText(/\/admin/, async (msg) => {
   }
 });
 
-const pendingCustomRejects = {}; // Stockage rejet perso
-
 // === CALLBACKS (inline buttons + admin) ===
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
