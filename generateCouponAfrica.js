@@ -1,16 +1,10 @@
 require('dotenv').config();
 const axios = require('axios');
-const {
-  getConfidence,
-  getSafestBet,
-  getTargetedBet,
-  formatMatchTips
-} = require('./couponUtils');
+const { getSafestBet, getTargetedBet } = require('./couponUtils');
 
 const API_BASE = 'https://v3.football.api-sports.io';
 const headers = { 'x-apisports-key': process.env.API_FOOTBALL_KEY };
 
-// Liste de ligues africaines (sans doublons)
 const leaguesAfrica = [
   { id: 223, name: 'Ligue 1 Pro 🇩🇿' },
   { id: 232, name: 'Botola Pro 🇲🇦' },
@@ -31,12 +25,7 @@ module.exports = async function generateCouponAfrica(limit = 2) {
       if (selectedMatches.length >= limit) break;
 
       const fixtureRes = await axios.get(`${API_BASE}/fixtures`, {
-        params: {
-          date: today,
-          league: league.id,
-          season: 2024,
-          timezone: 'Africa/Lome'
-        },
+        params: { date: today, league: league.id, season: 2024, timezone: 'Africa/Lome' },
         headers
       });
 
@@ -52,7 +41,6 @@ module.exports = async function generateCouponAfrica(limit = 2) {
 
         const bookmaker = oddsRes.data.response[0]?.bookmakers?.find(b => b.name === 'Bet365') ||
                           oddsRes.data.response[0]?.bookmakers?.[0];
-
         if (!bookmaker) continue;
 
         const bets = bookmaker.bets || [];
@@ -75,45 +63,18 @@ module.exports = async function generateCouponAfrica(limit = 2) {
         const home = match.teams.home.name;
         const away = match.teams.away.name;
         const hour = new Date(match.fixture.date).toLocaleTimeString('fr-FR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'Africa/Lome'
+          hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lome'
         });
 
-        selectedMatches.push(formatMatchTips({
-          leagueName: league.name,
-          home,
-          away,
-          hour,
-          tips
-        }));
+        selectedMatches.push(
+          `🏟️ *${league.name}*\n${home} vs ${away} - ${hour}\n${tips.join("\n")}`
+        );
       }
     }
 
-    if (!selectedMatches.length) {
-      return {
-        content: "⚠️ Aucun match fiable disponible aujourd'hui en Afrique.",
-        media_url: null,
-        media_type: null,
-        source: "api"
-      };
-    }
-
-    const finalContent = `🔥 *Coupon du jour – Afrique*\n\n${selectedMatches.join('\n\n')}\n\n💡 Source : API-Football`;
-
-    return {
-      content: finalContent,
-      media_url: null,
-      media_type: null,
-      source: "api"
-    };
+    return selectedMatches; // toujours un tableau
   } catch (err) {
     console.error('Erreur Africa generateCoupon:', err.message);
-    return {
-      content: "❌ Erreur lors de la génération du coupon Afrique.",
-      media_url: null,
-      media_type: null,
-      source: "api"
-    };
+    return []; // pour éviter le crash
   }
 };
