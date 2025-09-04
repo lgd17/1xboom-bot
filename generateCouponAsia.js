@@ -1,11 +1,6 @@
 require('dotenv').config();
 const axios = require('axios');
-const {
-  getConfidence,
-  getSafestBet,
-  getTargetedBet,
-  formatMatchTips
-} = require('./couponUtils');
+const { getSafestBet, getTargetedBet } = require('./couponUtils');
 
 const API_BASE = 'https://v3.football.api-sports.io';
 const headers = { 'x-apisports-key': process.env.API_FOOTBALL_KEY };
@@ -27,12 +22,7 @@ module.exports = async function generateCouponAsia(limit = 2) {
       if (selectedMatches.length >= limit) break;
 
       const fixtureRes = await axios.get(`${API_BASE}/fixtures`, {
-        params: {
-          date: today,
-          league: league.id,
-          season: 2024,
-          timezone: 'Asia/Tokyo'
-        },
+        params: { date: today, league: league.id, season: 2024, timezone: 'Asia/Tokyo' },
         headers
       });
 
@@ -70,46 +60,20 @@ module.exports = async function generateCouponAsia(limit = 2) {
         const home = match.teams.home.name;
         const away = match.teams.away.name;
         const hour = new Date(match.fixture.date).toLocaleTimeString('fr-FR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'Asia/Tokyo'
+          hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo'
         });
 
-        selectedMatches.push(formatMatchTips({
-          leagueName: league.name,
-          home,
-          away,
-          hour,
-          tips
-        }));
+        selectedMatches.push(
+          `🏟️ *${league.name}*\n${home} vs ${away} - ${hour}\n${tips.join("\n")}`
+        );
       }
     }
 
-    if (!selectedMatches.length) {
-      return {
-        content: "⚠️ Aucun pari fiable trouvé aujourd’hui en Asie.",
-        media_url: null,
-        media_type: null,
-        source: "api"
-      };
-    }
+    // Toujours retourner un tableau
+    return selectedMatches;
 
-    const finalContent = `🔥 *Coupon du jour – Asie*\n\n${selectedMatches.join('\n\n')}\n\n💡 Source : API-Football`;
-
-    return {
-      content: finalContent,
-      media_url: null,
-      media_type: null,
-      source: "api"
-    };
   } catch (err) {
     console.error('Erreur Asia generateCoupon:', err.message);
-    return {
-      content: "❌ Erreur lors de la génération du coupon Asie.",
-      media_url: null,
-      media_type: null,
-      source: "api"
-    };
+    return []; // pour éviter le crash
   }
 };
-
