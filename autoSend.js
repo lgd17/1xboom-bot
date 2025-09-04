@@ -118,7 +118,7 @@ async function sendManualCoupon() {
   }
 }
 
-/
+
 // Génération + envoi automatique combiné
 async function generateAndSendCoupon() {
   try {
