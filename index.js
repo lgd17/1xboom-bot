@@ -351,7 +351,6 @@ process.on("uncaughtException", (err) => {
 
 // =================== VERIFICATION UTILISATEUR ===================
 const timeoutMap = {};
-const userStates = {}; // <--- manquait !
 const validBookmakers = ["1xbet", "888starz", "melbet", "winwin"];
 const { isAllowed } = require("./rateLimiter");
 
