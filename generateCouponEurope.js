@@ -1,11 +1,6 @@
 require('dotenv').config();
 const axios = require('axios');
-const {
-  getConfidence,
-  getSafestBet,
-  getTargetedBet,
-  formatMatchTips
-} = require('./couponUtils');
+const { getSafestBet, getTargetedBet } = require('./couponUtils');
 
 const API_BASE = 'https://v3.football.api-sports.io';
 const headers = { 'x-apisports-key': process.env.API_FOOTBALL_KEY };
@@ -37,12 +32,7 @@ module.exports = async function generateCouponEurope(limit = 2) {
       if (selectedMatches.length >= limit) break;
 
       const fixtureRes = await axios.get(`${API_BASE}/fixtures`, {
-        params: {
-          date: today,
-          league: league.id,
-          season: 2024,
-          timezone: 'Europe/Paris'
-        },
+        params: { date: today, league: league.id, season: 2024, timezone: 'Europe/Paris' },
         headers
       });
 
@@ -80,45 +70,18 @@ module.exports = async function generateCouponEurope(limit = 2) {
         const home = match.teams.home.name;
         const away = match.teams.away.name;
         const hour = new Date(match.fixture.date).toLocaleTimeString('fr-FR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'Europe/Paris'
+          hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris'
         });
 
-        selectedMatches.push(formatMatchTips({
-          leagueName: league.name,
-          home,
-          away,
-          hour,
-          tips
-        }));
+        selectedMatches.push(
+          `🏟️ *${league.name}*\n${home} vs ${away} - ${hour}\n${tips.join("\n")}`
+        );
       }
     }
 
-    if (!selectedMatches.length) {
-      return {
-        content: "⚠️ Aucun pari fiable trouvé aujourd’hui en Europe.",
-        media_url: null,
-        media_type: null,
-        source: "api"
-      };
-    }
-
-    const finalContent = `🔥 *Coupon du jour – Europe*\n\n${selectedMatches.join('\n\n')}\n\n💡 Source : API-Football`;
-
-    return {
-      content: finalContent,
-      media_url: null,
-      media_type: null,
-      source: "api"
-    };
+    return selectedMatches; // toujours un tableau
   } catch (err) {
     console.error('Erreur Europe generateCoupon:', err.message);
-    return {
-      content: "❌ Erreur lors de la génération du coupon Europe.",
-      media_url: null,
-      media_type: null,
-      source: "api"
-    };
+    return []; // éviter crash si API KO
   }
 };
