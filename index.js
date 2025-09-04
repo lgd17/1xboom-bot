@@ -9,6 +9,7 @@ const fetch = require("node-fetch"); // utile si tu fais des appels API
 // ====== IMPORTS INTERNES ======
 const { app, bot } = require("./server");
 const { pool, insertManualCoupon } = require("./db");
+const { checkSpam } = require("./rateLimiter"); // anti-spam
 require("./pingCron");
 const { sendManualCoupon, generateAndSendCoupon, cleanOldData } = require("./autoSend");
 const { ping } = require("./pingServer")
