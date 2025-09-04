@@ -118,9 +118,11 @@ async function sendManualCoupon() {
   }
 }
 
-// Génération + envoi auto
+/
+/ Génération + envoi automatique combiné
 async function generateAndSendCoupon() {
   try {
+    // Vérifie si un coupon gratuit a déjà été généré aujourd'hui
     const { rows } = await pool.query(
       `SELECT * FROM daily_pronos WHERE date_only = CURRENT_DATE AND type = 'gratuit'`
     );
@@ -129,27 +131,32 @@ async function generateAndSendCoupon() {
       return;
     }
 
-    const europe = await generateCouponEurope();
-    const africa = await generateCouponAfrica();
-    const america = await generateCouponAmerica();
-    const asia = await generateCouponAsia();
+    // Génération des matchs pour chaque région
+    const allMatches = [
+      ...(await generateCouponEurope()),
+      ...(await generateCouponAfrica()),
+      ...(await generateCouponAmerica()),
+      ...(await generateCouponAsia())
+    ];
 
-    const allMatches = [...europe, ...africa, ...america, ...asia];
     if (allMatches.length === 0) {
-      console.log("⚠️ Aucun match généré aujourd’hui");
+      console.log("⚠️ Aucun match généré aujourd’hui pour aucune région");
       return;
     }
 
+    // Insertion dans la DB
     await pool.query(
       `INSERT INTO daily_pronos (matches, type) VALUES ($1, 'gratuit')`,
       [JSON.stringify(allMatches)]
     );
 
-    const message = `🎯 *𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥* 🎯\n\n${formatMatchTips(allMatches)}`;
+    const message = `🎯 *𝗖𝗢𝗨𝗣𝗢𝗡 𝗗𝗨 𝗝𝗢𝗨𝗥* 🎯\n\n${allMatches.join("\n\n")}`;
+
     const { rows: users } = await pool.query("SELECT telegram_id FROM verified_users");
 
     const report = await sendToUsers(users, message);
 
+    // Marque les utilisateurs comme ayant reçu le coupon
     for (let user of users) {
       await pool.query(
         `
@@ -161,11 +168,13 @@ async function generateAndSendCoupon() {
       );
     }
 
+    // Notification canal
     await bot.sendMessage(
       CHANNEL_ID,
       `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot : ${BOT_LINK}`
     );
 
+    // Rapport à l'admin
     if (ADMIN_ID) {
       await bot.sendMessage(
         ADMIN_ID,
@@ -175,12 +184,16 @@ async function generateAndSendCoupon() {
     }
 
     console.log("✅ Coupon généré et envoyé avec succès");
+
   } catch (err) {
-    console.error("❌ Erreur génération coupon API :", err);
+    console.error("❌ Erreur génération coupon :", err);
+    if (ADMIN_ID) {
+      await bot.sendMessage(ADMIN_ID, `❌ Erreur génération coupon : ${err.message}`);
+    }
   }
 }
 
-// Nettoyage auto
+// Nettoyage automatique des anciens pronostics
 async function cleanOldData() {
   try {
     const { rowCount: pronosDeleted } = await pool.query(`
@@ -202,6 +215,7 @@ async function cleanOldData() {
     }
 
     console.log("✅ Nettoyage terminé :", pronosDeleted, "pronos et", accessDeleted, "accès supprimés");
+
   } catch (err) {
     console.error("❌ Erreur de nettoyage :", err.message);
     if (ADMIN_ID) {
@@ -211,7 +225,6 @@ async function cleanOldData() {
 }
 
 module.exports = {
-  sendManualCoupon,
   generateAndSendCoupon,
   cleanOldData
 };
