@@ -119,7 +119,7 @@ async function sendManualCoupon() {
 }
 
 /
-/ Génération + envoi automatique combiné
+// Génération + envoi automatique combiné
 async function generateAndSendCoupon() {
   try {
     // Vérifie si un coupon gratuit a déjà été généré aujourd'hui
