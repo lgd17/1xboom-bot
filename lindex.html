@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ROUX-Pronos- Canal Intermédiaire </title>
+    <title>ROUX-Pronos - Canal Intermédiaire</title>
     <style>
         * {
             margin: 0;
@@ -74,16 +74,17 @@
             height: 130px;
             border-radius: 50%;
             margin: 0 auto 25px;
-            background: linear-gradient(135deg, #2ecc71, #27ae60, #229954);
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 50px;
             color: white;
             animation: pulse 3s infinite;
-            box-shadow: 0 15px 40px rgba(46, 204, 113, 0.3);
+            box-shadow: 0 15px 40px rgba(231, 76, 60, 0.3);
             position: relative;
             overflow: hidden;
+            font-weight: bold;
         }
 
         .logo::before {
@@ -100,11 +101,11 @@
         @keyframes pulse {
             0%, 100% {
                 transform: scale(1);
-                box-shadow: 0 15px 40px rgba(46, 204, 113, 0.3);
+                box-shadow: 0 15px 40px rgba(231, 76, 60, 0.3);
             }
             50% {
                 transform: scale(1.05);
-                box-shadow: 0 20px 50px rgba(46, 204, 113, 0.4);
+                box-shadow: 0 20px 50px rgba(231, 76, 60, 0.4);
             }
         }
 
@@ -156,7 +157,7 @@
         .stat-number {
             font-size: 24px;
             font-weight: 800;
-            color: #B8860B;
+            color: #27ae60;
             display: block;
         }
 
@@ -249,6 +250,21 @@
             color: white;
         }
 
+        .tiktok-badge {
+            background: linear-gradient(45deg, #ff0050, #fe2c55);
+        }
+
+        .facebook-badge {
+            background: linear-gradient(45deg, #1877f2, #42a5f5);
+        }
+
+        .footer {
+            margin-top: 30px;
+            color: #95a5a6;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
         .disclaimer {
             background: rgba(241, 196, 15, 0.1);
             border: 1px solid rgba(241, 196, 15, 0.3);
@@ -313,9 +329,9 @@
 
     <div class="container">
         <div class="header-section">
-            <img src="URL_DE_VOTRE_IMAGE" alt="BOOMFURY Logo" class="logo">
+            <div class="logo">R</div>
             <h1>ROUX-PRONOS</h1>
-            <p class="subtitle">🏆 Canal Intermediaire 🏆</p>
+            <p class="subtitle">🏆 Canal Intermédiaire 🏆</p>
             <p class="description">Rejoignez notre communauté de parieurs gagnants ! Pronostics quotidiens, analyses expertes et conseils VIP.</p>
         </div>
 
@@ -335,13 +351,24 @@
         </div>
 
         <div class="cta-section">
-            <a href="https://t.me/votre_canal_pronostics" 
+            <a href="https://t.me/+T5Mfv_DlKcs2YTU8" 
                class="telegram-button" 
                target="_blank"
                onclick="trackClick('telegram')">
                 <span class="telegram-icon">📱</span>
                 <span>Rejoindre le Canal</span>
             </a>
+        </div>
+
+        <div class="traffic-sources">
+            <div class="source-badge tiktok-badge">
+                <span>🎵</span>
+                <span>Depuis TikTok</span>
+            </div>
+            <div class="source-badge facebook-badge">
+                <span>📘</span>
+                <span>Depuis Facebook</span>
+            </div>
         </div>
 
         <div class="disclaimer">
@@ -380,7 +407,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             createParticles();
             
-            const elements = ['.stats', '.telegram-button'];
+            const elements = ['.stats', '.telegram-button', '.traffic-sources'];
             elements.forEach((selector, index) => {
                 const element = document.querySelector(selector);
                 if (element) {
