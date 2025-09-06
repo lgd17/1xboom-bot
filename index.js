@@ -369,14 +369,12 @@ bot.on("message", async (msg) => {
   const text = msg.text?.trim();
   if (!text || text.startsWith("/")) return;
 
-
-// 🔹 Anti-spam
-  if (checkSpam(chatId)) {
-    return bot.answerCallbackQuery(query.id, {
-      text: "⚠️ Trop de clics rapides. Patiente un peu.",
-      show_alert: true,
-    });
+  
+  // 🔹 Anti-spam
+if (checkSpam(chatId)) {
+    return bot.sendMessage(chatId, "⚠️ Trop de clics rapides. Patiente un peu.");
   }
+
 
   const state = userStates[chatId];
 
@@ -672,13 +670,7 @@ bot.on("callback_query", async (query) => {
   const data = query.data;
 
 
-// 🔹 Anti-spam
-  if (checkSpam(chatId)) {
-    return bot.answerCallbackQuery(query.id, {
-      text: "⚠️ Trop de clics rapides. Patiente un peu.",
-      show_alert: true,
-    });
-  }
+
 
    // --- ADMIN validation ---
   if (data.startsWith("validate_") && ADMIN_IDS.includes(adminId)) {
