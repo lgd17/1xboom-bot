@@ -17,47 +17,57 @@ const leaguesAfrica = [
   { id: 297, name: 'PSL 🇿🇦' }
 ];
 
+// Fonction pour récupérer la saison active d'une ligue
+async function getCurrentSeason(leagueId) {
+  try {
+    const res = await axios.get(`${API_BASE}/leagues`, {
+      params: { id: leagueId },
+      headers
+    });
+    const seasons = res.data.response[0]?.seasons || [];
+    const currentSeason = seasons.find(s => s.current) || seasons[0];
+    return currentSeason?.year || new Date().getFullYear();
+  } catch (err) {
+    console.error(`Erreur récupération saison ligue ${leagueId}:`, err.message);
+    return new Date().getFullYear();
+  }
+}
+
 module.exports = async function generateCouponAfrica(limit = 2) {
   const today = new Date().toISOString().split('T')[0];
-  const year = new Date().getFullYear();
   const selectedMatches = [];
 
   try {
     for (const league of leaguesAfrica) {
       if (selectedMatches.length >= limit) break;
 
-      let fixtures = [];
+      const season = await getCurrentSeason(league.id);
 
-      // Essaye saison courante, sinon précédente
-      for (const season of [year, year - 1]) {
-        const fixtureRes = await axios.get(`${API_BASE}/fixtures`, {
-          params: { date: today, league: league.id, season, timezone: 'Africa/Lome' },
-          headers
-        });
+      // Récupération des matchs du jour
+      const fixtureRes = await axios.get(`${API_BASE}/fixtures`, {
+        params: { date: today, league: league.id, season, timezone: 'Africa/Lome' },
+        headers
+      });
 
-        fixtures = fixtureRes.data.response;
-        if (fixtures.length > 0) {
-          console.log(`✅ ${fixtures.length} matchs trouvés pour ${league.name} (${season})`);
-          break;
-        }
-      }
+      const fixtures = fixtureRes.data.response.filter(f => f.fixture.status.short === 'NS');
 
-      if (!fixtures || fixtures.length === 0) {
-        console.log(`⚠️ Aucun match aujourd'hui pour ${league.name}`);
+      if (!fixtures.length) {
+        console.log(`⚠️ Aucun match non commencé pour ${league.name}`);
         continue;
       }
 
       for (const match of fixtures) {
         if (selectedMatches.length >= limit) break;
 
+        // On récupère les odds
         const oddsRes = await axios.get(`${API_BASE}/odds`, {
           params: { fixture: match.fixture.id },
           headers
         });
 
+        const bookmakers = oddsRes.data.response[0]?.bookmakers || [];
         const bookmaker =
-          oddsRes.data.response[0]?.bookmakers?.find(b => b.name === 'Bet365') ||
-          oddsRes.data.response[0]?.bookmakers?.[0];
+          bookmakers.find(b => b.name === 'Bet365') || bookmakers[0];
         if (!bookmaker) continue;
 
         const bets = bookmaker.bets || [];
