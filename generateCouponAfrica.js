@@ -1,3 +1,4 @@
+// generateCouponAfrica.js
 require('dotenv').config();
 const axios = require('axios');
 const { getSafestBet, getTargetedBet } = require('./couponUtils');
@@ -18,18 +19,33 @@ const leaguesAfrica = [
 
 module.exports = async function generateCouponAfrica(limit = 2) {
   const today = new Date().toISOString().split('T')[0];
+  const year = new Date().getFullYear();
   const selectedMatches = [];
 
   try {
     for (const league of leaguesAfrica) {
       if (selectedMatches.length >= limit) break;
 
-      const fixtureRes = await axios.get(`${API_BASE}/fixtures`, {
-        params: { date: today, league: league.id, season: 2024, timezone: 'Africa/Lome' },
-        headers
-      });
+      let fixtures = [];
 
-      const fixtures = fixtureRes.data.response;
+      // Essaye saison courante, sinon précédente
+      for (const season of [year, year - 1]) {
+        const fixtureRes = await axios.get(`${API_BASE}/fixtures`, {
+          params: { date: today, league: league.id, season, timezone: 'Africa/Lome' },
+          headers
+        });
+
+        fixtures = fixtureRes.data.response;
+        if (fixtures.length > 0) {
+          console.log(`✅ ${fixtures.length} matchs trouvés pour ${league.name} (${season})`);
+          break;
+        }
+      }
+
+      if (!fixtures || fixtures.length === 0) {
+        console.log(`⚠️ Aucun match aujourd'hui pour ${league.name}`);
+        continue;
+      }
 
       for (const match of fixtures) {
         if (selectedMatches.length >= limit) break;
@@ -39,8 +55,9 @@ module.exports = async function generateCouponAfrica(limit = 2) {
           headers
         });
 
-        const bookmaker = oddsRes.data.response[0]?.bookmakers?.find(b => b.name === 'Bet365') ||
-                          oddsRes.data.response[0]?.bookmakers?.[0];
+        const bookmaker =
+          oddsRes.data.response[0]?.bookmakers?.find(b => b.name === 'Bet365') ||
+          oddsRes.data.response[0]?.bookmakers?.[0];
         if (!bookmaker) continue;
 
         const bets = bookmaker.bets || [];
@@ -56,7 +73,7 @@ module.exports = async function generateCouponAfrica(limit = 2) {
         if (overTip) tips.push(`🎯 *Over 2.5* : ${overTip.odd} ${overTip.confidence}`);
 
         const bttsTip = getTargetedBet(bets, 'Both Teams Score', 'Yes');
-        if (bttsTip) tips.push(`🤝 *BTTS* Oui : ${bttsTip.odd} ${bttsTip.confidence}`);
+        if (bttsTip) tips.push(`🤝 *BTTS Oui* : ${bttsTip.odd} ${bttsTip.confidence}`);
 
         if (tips.length === 0) continue;
 
@@ -72,9 +89,10 @@ module.exports = async function generateCouponAfrica(limit = 2) {
       }
     }
 
-    return selectedMatches; // toujours un tableau
+    return selectedMatches;
   } catch (err) {
     console.error('Erreur Africa generateCoupon:', err.message);
-    return []; // pour éviter le crash
+    return [];
   }
 };
+
