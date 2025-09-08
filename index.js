@@ -369,13 +369,6 @@ bot.on("message", async (msg) => {
   const text = msg.text?.trim();
   if (!text || text.startsWith("/")) return;
 
-  
-  // 🔹 Anti-spam
-if (checkSpam(chatId)) {
-    return bot.sendMessage(chatId, "⚠️ Trop de clics rapides. Patiente un peu.");
-  }
-
-
   const state = userStates[chatId];
 
   try {
