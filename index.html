@@ -14,9 +14,9 @@
         body {
             font-family: 'Arial', sans-serif;
             min-height: 100vh;
-             background: url('https://raw.githubusercontent.com/lgd17/1xboom-bot/glitch/plublic/logos.png
-') center/cover no-repeat,
-           linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.5));
+            background: url('https://raw.githubusercontent.com/lgd17/1xboom-bot/glitch/public/logos.png') center/cover no-repeat,
+                       linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.6));
+            background-attachment: fixed;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -38,22 +38,22 @@
 
         .particle {
             position: absolute;
-            background: rgba(46, 204, 113, 0.1);
+            background: rgba(255, 215, 0, 0.15);
             border-radius: 50%;
             animation: float 8s ease-in-out infinite;
         }
 
         .container {
-            background: rgba(255, 255, 255, 0.98);
-            backdrop-filter: blur(15px);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
             border-radius: 30px;
             padding: 45px;
-            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
             text-align: center;
             max-width: 450px;
             width: 100%;
             animation: slideUp 1s ease-out;
-            border: 2px solid rgba(46, 204, 113, 0.2);
+            border: 2px solid rgba(255, 215, 0, 0.3);
         }
 
         @keyframes slideUp {
@@ -76,19 +76,13 @@
             height: 130px;
             border-radius: 50%;
             margin: 0 auto 25px;
-           background: url('https://raw.githubusercontent.com/lgd17/1xboom-bot/glitch/plublic/logos.png
-') center/cover no-repeat,
-           linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.5));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 50px;
-            color: white;
+            background: url('https://raw.githubusercontent.com/lgd17/1xboom-bot/glitch/public/logos.png') center/cover no-repeat;
+            display: block;
             animation: pulse 3s infinite;
-            box-shadow: 0 15px 40px rgba(231, 76, 60, 0.3);
+            box-shadow: 0 15px 40px rgba(255, 215, 0, 0.4);
             position: relative;
             overflow: hidden;
-            font-weight: bold;
+            border: 3px solid rgba(255, 215, 0, 0.6);
         }
 
         .logo::before {
@@ -98,18 +92,18 @@
             left: -50%;
             width: 200%;
             height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-            animation: shine 2s infinite;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            animation: shine 3s infinite;
         }
 
         @keyframes pulse {
             0%, 100% {
                 transform: scale(1);
-                box-shadow: 0 15px 40px rgba(231, 76, 60, 0.3);
+                box-shadow: 0 15px 40px rgba(255, 215, 0, 0.4);
             }
             50% {
                 transform: scale(1.05);
-                box-shadow: 0 20px 50px rgba(231, 76, 60, 0.4);
+                box-shadow: 0 20px 50px rgba(255, 215, 0, 0.5);
             }
         }
 
@@ -128,6 +122,10 @@
             margin-bottom: 15px;
             font-weight: 800;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         .subtitle {
@@ -149,9 +147,9 @@
             justify-content: space-around;
             margin-bottom: 30px;
             padding: 20px;
-            background: rgba(46, 204, 113, 0.1);
+            background: rgba(255, 215, 0, 0.1);
             border-radius: 15px;
-            border: 1px solid rgba(46, 204, 113, 0.2);
+            border: 1px solid rgba(255, 215, 0, 0.3);
         }
 
         .stat {
@@ -161,7 +159,7 @@
         .stat-number {
             font-size: 24px;
             font-weight: 800;
-            color: #27ae60;
+            color: #B8860B;
             display: block;
         }
 
@@ -284,15 +282,15 @@
         @keyframes float {
             0%, 100% {
                 transform: translateY(0px) rotate(0deg);
-                opacity: 1;
+                opacity: 0.7;
             }
             25% {
                 transform: translateY(-30px) rotate(90deg);
-                opacity: 0.8;
+                opacity: 0.9;
             }
             50% {
                 transform: translateY(-60px) rotate(180deg);
-                opacity: 0.6;
+                opacity: 0.5;
             }
             75% {
                 transform: translateY(-30px) rotate(270deg);
@@ -325,6 +323,10 @@
                 flex-direction: column;
                 align-items: center;
             }
+
+            body {
+                background-attachment: scroll;
+            }
         }
     </style>
 </head>
@@ -333,8 +335,7 @@
 
     <div class="container">
         <div class="header-section">
-           <img src="https://raw.githubusercontent.com/lgd17/1xboom-bot/glitch/plublic/logos.png
-" alt="BOOMFURY Logo" class="logo">
+            <div class="logo"></div>
             <h1>ROUX-PRONOS</h1>
             <p class="subtitle">🏆 Canal Intermédiaire 🏆</p>
             <p class="description">Rejoignez notre communauté de parieurs gagnants ! Pronostics quotidiens, analyses expertes et conseils VIP.</p>
@@ -387,22 +388,22 @@
     </div>
 
     <script>
-        // Créer des particules animées
+        // Créer des particules animées dorées
         function createParticles() {
             const particlesContainer = document.querySelector('.bg-particles');
-            const particleCount = 15;
+            const particleCount = 20;
 
             for (let i = 0; i < particleCount; i++) {
                 const particle = document.createElement('div');
                 particle.className = 'particle';
                 
-                const size = Math.random() * 4 + 2;
+                const size = Math.random() * 5 + 2;
                 particle.style.width = size + 'px';
                 particle.style.height = size + 'px';
                 particle.style.left = Math.random() * 100 + '%';
                 particle.style.top = Math.random() * 100 + '%';
                 particle.style.animationDelay = Math.random() * 8 + 's';
-                particle.style.animationDuration = (Math.random() * 4 + 6) + 's';
+                particle.style.animationDuration = (Math.random() * 6 + 8) + 's';
                 
                 particlesContainer.appendChild(particle);
             }
@@ -443,9 +444,9 @@
         // Effet de parallaxe léger
         document.addEventListener('mousemove', function(e) {
             const logo = document.querySelector('.logo');
-            const x = (e.clientX / window.innerWidth - 0.5) * 10;
-            const y = (e.clientY / window.innerHeight - 0.5) * 10;
-            logo.style.transform = `translate(${x}px, ${y}px) scale(1)`;
+            const x = (e.clientX / window.innerWidth - 0.5) * 15;
+            const y = (e.clientY / window.innerHeight - 0.5) * 15;
+            logo.style.transform = `translate(${x}px, ${y}px)`;
         });
 
         // Animation du bouton au survol
@@ -456,6 +457,13 @@
 
         telegramButton.addEventListener('mouseleave', function() {
             this.style.background = 'linear-gradient(135deg, #0088cc, #00a0e6)';
+        });
+
+        // Effet de parallaxe sur l'arrière-plan
+        window.addEventListener('scroll', function() {
+            const scrolled = window.pageYOffset;
+            const parallax = scrolled * 0.5;
+            document.body.style.backgroundPosition = `center ${parallax}px`;
         });
     </script>
 </body>
