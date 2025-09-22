@@ -1,3 +1,4 @@
+// spamUtils.js
 const usersMap = new Map();
 const LIMIT_COUNT = 5;        // max messages
 const TIME_WINDOW = 60 * 1000; // 1 min
@@ -12,7 +13,6 @@ function checkSpam(userId) {
     return false;
   }
 
-  // ⚖️ Réduit le compteur selon le temps écoulé
   const timePassed = now - userData.lastMessage;
   const reduce = Math.floor(timePassed / (TIME_WINDOW / LIMIT_COUNT)); 
 
@@ -23,3 +23,5 @@ function checkSpam(userId) {
 
   return userData.count > LIMIT_COUNT;
 }
+
+module.exports = { checkSpam };  // ⚠️ bien exporter
