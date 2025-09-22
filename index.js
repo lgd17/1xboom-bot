@@ -9,7 +9,17 @@ const fetch = require("node-fetch"); // utile si tu fais des appels API
 // ====== IMPORTS INTERNES ======
 const { app, bot } = require("./server");
 const { pool, insertManualCoupon } = require("./db");
-const { checkSpam } = require("./rateLimiter"); // anti-spam
+const { checkSpam } = require("./spamUtils");
+
+bot.on("message", (msg) => {
+  const userId = msg.from.id;
+
+  if (checkSpam(userId)) {
+    return bot.sendMessage(userId, "🚫 Tu envoies trop de messages, attends un peu.");
+  }
+
+  // traitement normal du message
+});
 require("./pingCron");
 const { sendManualCoupon, generateAndSendCoupon, cleanOldData } = require("./autoSend");
 const { ping } = require("./pingServer")
