@@ -225,6 +225,8 @@ async function cleanOldData() {
 }
 
 module.exports = {
+  sendManualCoupon,
   generateAndSendCoupon,
   cleanOldData
 };
+
