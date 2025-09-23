@@ -10,16 +10,6 @@ const fetch = require("node-fetch"); // utile si tu fais des appels API
 const { app, bot } = require("./server");
 const { pool, insertManualCoupon } = require("./db");
 const { checkSpam } = require("./spamUtils");
-
-bot.on("message", (msg) => {
-  const userId = msg.from.id;
-
-  if (checkSpam(userId)) {
-    return bot.sendMessage(userId, "🚫 Tu envoies trop de messages, attends un peu.");
-  }
-
-  // traitement normal du message
-});
 require("./pingCron");
 const { sendManualCoupon, generateAndSendCoupon, cleanOldData } = require("./autoSend");
 const { ping } = require("./pingServer")
@@ -402,65 +392,8 @@ bot.on("message", async (msg) => {
         });
       }
 
-      // ✅ Vérifie s’il a déjà eu le coupon
-      const accessRes = await pool.query(
-        "SELECT * FROM daily_access WHERE telegram_id = $1 AND date = CURRENT_DATE",
-        [chatId]
-      );
-
-      if (accessRes.rows.length === 0) {
-        await pool.query(
-          `INSERT INTO daily_access (telegram_id, date, clicked) VALUES ($1, CURRENT_DATE, false)
-           ON CONFLICT (telegram_id, date) DO NOTHING`,
-          [chatId]
-        );
-      } else if (accessRes.rows[0].clicked) {
-        return bot.sendMessage(chatId, "✅ Tu as déjà reçu ton pronostic aujourd’hui. Patiente jusqu’à demain.");
-      }
-
-      // 1. Requête SQL : récupérer le coupon gratuit du jour
-const result = await pool.query(`
-  SELECT content, media_url, media_type
-  FROM daily_pronos
-  WHERE date_only = CURRENT_DATE
-    AND type = 'gratuit'
-  LIMIT 1
-`);
-
-// 2. S’il n’y a aucun coupon
-if (result.rows.length === 0) {
-  return bot.sendMessage(chatId, "⚠️ Aucun coupon disponible aujourd'hui.");
-}
-
-// 3. Extraire les champs
-const { content, media_url, media_type } = result.rows[0];
-
-// 4. Envoyer d’abord le média si présent
-if (media_url) {
-  if (media_type === 'photo') {
-    await bot.sendPhoto(chatId, media_url);
-  } else if (media_type === 'video') {
-    await bot.sendVideo(chatId, media_url);
-  }
-}
- //  5. Envoyer le contenu texte du pronostic
-await bot.sendMessage(chatId, `🎯 *Pronostic du jour :*\n\n${content}`, {
-  parse_mode: "Markdown",
-  reply_markup: {
-    keyboard: [
-      ["🏆 Mes Points"],
-      ["🆘 Assistance 🤖", "🤝 Parrainage"]
-    ],
-    resize_keyboard: true
-  }
-});
-
-      await pool.query(
-        `UPDATE daily_access SET clicked = true WHERE telegram_id = $1 AND date = CURRENT_DATE`,
-        [chatId]
-      );
-
-      return;
+      // Si déjà vérifié, on peut envoyer un simple message de confirmation
+      return bot.sendMessage(chatId, "✅ Tu es déjà vérifié. Continue à profiter du bot !");
     }
 
     // 🔁 Si une étape est en cours
