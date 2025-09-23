@@ -604,92 +604,77 @@ const pendingCustomRejects = {}; // Pour stocker les ID en attente de motif pers
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
   const adminId = query.from.id;
+  const messageId = query.message.message_id;
   const data = query.data;
 
-
-
-
-   // --- ADMIN validation ---
-  if (data.startsWith("validate_") && ADMIN_IDS.includes(adminId)) {
-    const telegramId = data.split("_")[1];
-
-    try {
-      const { rows } = await pool.query("SELECT * FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
+  try {
+    // ---------------- ADMIN VALIDATION ----------------
+    if (data.startsWith("validate_") && ADMIN_IDS.includes(adminId)) {
+      const telegramId = data.split("_")[1];
+      const { rows } = await pool.query(
+        "SELECT * FROM pending_verifications WHERE telegram_id = $1",
+        [telegramId]
+      );
       if (rows.length === 0) return;
 
       const user = rows[0];
+      await pool.query(
+        "INSERT INTO verified_users (telegram_id, username, bookmaker, deposit_id, amount) VALUES ($1,$2,$3,$4,$5)",
+        [user.telegram_id, user.username, user.bookmaker, user.deposit_id, user.amount]
+      );
+      await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
 
-      await pool.query("INSERT INTO verified_users (telegram_id, username, bookmaker, deposit_id, amount) VALUES ($1,$2,$3,$4,$5)", [
-        user.telegram_id,
-        user.username,
-        user.bookmaker,
-        user.deposit_id,
-        user.amount
-      ]);
+      await bot.sendMessage(user.telegram_id, "✅ Ton compte a été validé avec succès !", {
+        reply_markup: {
+          keyboard: [["🎯 Pronostics du jour"]],
+          resize_keyboard: true,
+          remove_keyboard: true,
+        },
+      });
 
-     await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
-
-await bot.sendMessage(user.telegram_id, `✅ Ton compte a été validé avec succès !`, {
-  reply_markup: {
-    keyboard: [["🎯 Pronostics du jour"]],
-    resize_keyboard: true,
-    remove_keyboard: true
-  }
-});
-
-await bot.sendMessage(chatId, `✅ Validation de @${user.username} confirmée.`);
-} catch (err) {
-      console.error("Erreur de validation:", err);
+      return bot.sendMessage(chatId, `✅ Validation de @${user.username} confirmée.`);
     }
-  }
 
+ // ---------------- ADMIN REJET ----------------
+    if (data.startsWith("reject_") && ADMIN_IDS.includes(adminId)) {
+      const telegramId = data.split("_")[1];
+      const motifs = [
+        [{ text: "🔻 Dépôt insuffisant", callback_data: `motif1_${telegramId}` }],
+        [{ text: "⛔️ ID non lié au code P999X", callback_data: `motif2_${telegramId}` }],
+        [{ text: "📝 Autres raisons", callback_data: `motif3_${telegramId}` }],
+      ];
 
-  // --- ADMIN rejet ---
-  if (data.startsWith("reject_") && ADMIN_IDS.includes(adminId)) {
-    const telegramId = data.split("_")[1];
+      return bot.editMessageReplyMarkup({ inline_keyboard: motifs }, { chat_id: chatId, message_id: messageId });
+    }
 
-    const motifs = [
-      [{ text: "🔻 Dépôt insuffisant", callback_data: `motif1_${telegramId}` }],
-      [{ text: "⛔️ ID non lié au code P999X", callback_data: `motif2_${telegramId}` }],
-      [{ text: "📝 Autres raisons", callback_data: `motif3_${telegramId}` }]
-    ];
+    // ---------------- ADMIN REJETS RAPIDES ----------------
+    if ((data.startsWith("motif1_") || data.startsWith("motif2_")) && ADMIN_IDS.includes(adminId)) {
+      const [motif, telegramId] = data.split("_");
+      const reason =
+        motif === "motif1"
+          ? "❌ Rejeté : dépôt insuffisant."
+          : "❌ Rejeté : cet ID de dépôt n’est pas lié au code promo P999X.";
 
-    return bot.editMessageReplyMarkup(
-      { inline_keyboard: motifs },
-      { chat_id: chatId, message_id: query.message.message_id }
-    );
-  }
+      await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
 
-   // --- ADMIN rejets rapides ---
-  if ((data.startsWith("motif1_") || data.startsWith("motif2_")) && ADMIN_IDS.includes(adminId)) {
-    const [motif, telegramId] = data.split("_");
-    const reason =
-      motif === "motif1"
-        ? "❌ Rejeté : dépôt insuffisant."
-        : "❌ Rejeté : cet ID de dépôt n’est pas lié au code promo P999X.";
+      await bot.sendMessage(telegramId, reason);
+      await bot.sendMessage(telegramId, `🔁 Tu peux recommencer la procédure.`, {
+        reply_markup: {
+          keyboard: [["🔁 recommencer"]],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+        },
+      });
 
+      return bot.sendMessage(chatId, `🚫 Rejet envoyé à l'utilisateur.`);
+    }
 
-    await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
-
-    await bot.sendMessage(telegramId, reason);
-    await bot.sendMessage(telegramId, `🔁 Tu peux recommencer la procédure.`, {
-      reply_markup: {
-        keyboard: [["🔁 recommencer"]],
-        resize_keyboard: true,
-        one_time_keyboard: true
-      }
-    });
-
-    return bot.sendMessage(chatId, `🚫 Rejet envoyé à l'utilisateur.`);
-  }
-
-  // --- ADMIN rejet personnalisé ---
-  if (data.startsWith("motif3_") && ADMIN_IDS.includes(adminId)) {
-    const telegramId = data.split("_")[1];
-    pendingCustomRejects[adminId] = telegramId;
-    return bot.sendMessage(chatId, "✍️ Envoie manuellement le motif de rejet pour l’utilisateur.");
-  }
-});
+    // ---------------- ADMIN REJET PERSONNALISÉ ----------------
+    if (data.startsWith("motif3_") && ADMIN_IDS.includes(adminId)) {
+      const telegramId = data.split("_")[1];
+      pendingCustomRejects[adminId] = telegramId;
+      return bot.sendMessage(chatId, "✍️ Envoie manuellement le motif de rejet pour l’utilisateur.");
+    }
 
 // Réception d’un motif personnalisé
 bot.on("message", async (msg) => {
@@ -717,21 +702,22 @@ bot.on("message", async (msg) => {
   }
 
 
-// --- Utilisateur récupère son prono ---
-bot.on("callback_query", async (query) => {
-  const chatId = query.message.chat.id;
-  const messageId = query.message.message_id;
+if (data === "get_prono") {
+      // Vérifie si l'utilisateur est validé
+      const resUser = await pool.query("SELECT * FROM verified_users WHERE telegram_id = $1", [chatId]);
+      if (resUser.rows.length === 0) {
+        return bot.sendMessage(chatId, "🔒 Tu dois d'abord valider ton compte pour obtenir les pronostics.");
+      }
 
-  if (query.data === "get_prono") {
-    try {
-      // Supprime le bouton inline après clic
-      await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId });
+      // Supprime le clavier inline seulement si il existe
+      const replyMarkup = query.message.reply_markup;
+      if (replyMarkup?.inline_keyboard?.length) {
+        await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId });
+      }
 
-      // Récupère la date du jour au format YYYY-MM-DD
+      // Récupère le pronostic du jour
       const today = new Date().toISOString().slice(0, 10);
-
-      // Recherche le coupon du jour (gratuit)
-      const res = await pool.query(
+      const resProno = await pool.query(
         `SELECT content, media_type, media_url 
          FROM daily_pronos 
          WHERE date_only = $1 AND type = 'gratuit' 
@@ -739,45 +725,40 @@ bot.on("callback_query", async (query) => {
         [today]
       );
 
-      if (res.rows.length === 0) {
-        await bot.sendMessage(chatId, "⚠️ Aucun pronostic du jour n'est encore disponible.");
-      } else {
-        const { content, media_type, media_url } = res.rows[0];
-
-        // Envoie le média si présent
-        if (media_url && media_type) {
-          switch (media_type) {
-            case "photo":
-              await bot.sendPhoto(chatId, media_url);
-              break;
-            case "video":
-              await bot.sendVideo(chatId, media_url);
-              break;
-            case "voice":
-              await bot.sendVoice(chatId, media_url);
-              break;
-            case "audio":
-              await bot.sendAudio(chatId, media_url);
-              break;
-            case "video_note":
-              await bot.sendVideoNote(chatId, media_url);
-              break;
-            default:
-              console.warn("Type de média inconnu :", media_type);
-          }
-        }
-
-        // Envoie le texte en HTML
-        if (content) await bot.sendMessage(chatId, content, { parse_mode: "HTML" });
+      if (resProno.rows.length === 0) {
+        return bot.sendMessage(chatId, "⚠️ Aucun pronostic du jour n'est encore disponible.");
       }
 
-      // Affiche ensuite le menu principal
-      await sendMainMenu(chatId);
+      const { content, media_type, media_url } = resProno.rows[0];
 
-    } catch (error) {
-      console.error("Erreur lors de l'envoi du pronostic :", error);
-      await bot.sendMessage(chatId, "❌ Une erreur est survenue, réessaie plus tard.");
+      if (media_url && media_type) {
+        switch (media_type) {
+          case "photo":
+            await bot.sendPhoto(chatId, media_url);
+            break;
+          case "video":
+            await bot.sendVideo(chatId, media_url);
+            break;
+          case "voice":
+            await bot.sendVoice(chatId, media_url);
+            break;
+          case "audio":
+            await bot.sendAudio(chatId, media_url);
+            break;
+          case "video_note":
+            await bot.sendVideoNote(chatId, media_url);
+            break;
+          default:
+            console.warn("Type de média inconnu :", media_type);
+        }
+      }
+
+      if (content) await bot.sendMessage(chatId, content, { parse_mode: "HTML" });
+      return sendMainMenu(chatId); // Affiche le menu principal
     }
+  } catch (err) {
+    console.error("Erreur callback_query:", err);
+    await bot.sendMessage(chatId, "❌ Une erreur est survenue, réessaie plus tard.");
   }
 });
 
