@@ -521,13 +521,7 @@ bot.on("message", async (msg) => {
           });
         }, 8000);
 
-        setTimeout(() => {
-          bot.editMessageText("⌛ Chargement...", {
-            chat_id: chatId,
-            message_id: sentMessage.message_id,
-            parse_mode: "Markdown",
-          });
-        }, 9000);
+      
 
          setTimeout(() => {
           bot.editMessageText("Terminé.", {
@@ -535,7 +529,7 @@ bot.on("message", async (msg) => {
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
           });
-        }, 10000);
+        }, 9000);
 
         setTimeout(() => {
           bot.editMessageText("Terminé..", {
@@ -543,7 +537,7 @@ bot.on("message", async (msg) => {
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
           });
-        }, 11000);
+        }, 10000);
 
         setTimeout(() => {
           bot.editMessageText("Terminé✅", {
@@ -551,13 +545,13 @@ bot.on("message", async (msg) => {
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
           });
-        }, 12000);
+        }, 11000);
 
         setTimeout(() => {
           bot.sendMessage(chatId, "*🤖 Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*", {
             parse_mode: "Markdown",
           });
-        }, 13000);
+        }, 12000);
 
         return;
       }
