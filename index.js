@@ -145,64 +145,6 @@ async function isUserInChannel(userId, channelUsername) {
   }
 }
 
-//async function sendMainMenu(chatId) {
-async function sendMainMenu(chatId) {
-  try {
-    const res = await pool.query(
-      "SELECT * FROM verified_users WHERE telegram_id = $1",
-      [chatId]
-    );
-
-    const isVerified = res.rows.length > 0;
-
-    const keyboard = isVerified
-      ? [
-          ["🏆 Mes Points"],
-          ["🤝 Parrainage", "🆘 Assistance 🤖"],
-        ]
-      : [["🎯 Pronostics du jour"]];
-
-    const message = isVerified
-      ? "Bienvenue sur *1XBOOM* ! "
-      : "Clique sur le bouton 🎯 Pronostics du jour pour accéder aux pronostics.";
-
-    const menu = {
-      reply_markup: {
-        keyboard,
-        resize_keyboard: true,
-        one_time_keyboard: false,
-      },
-      parse_mode: "Markdown",
-    };
-
-    await bot.sendMessage(chatId, message, menu);
-  } catch (err) {
-    console.error("Erreur menu :", err);
-    bot.sendMessage(chatId, "❌ Une erreur est survenue lors du chargement du menu.");
-  }
-}
-
-
-// --- /start pour afficher le menu ---
-bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-  await sendMainMenu(chatId);
-});
-
-// --- Gestion des messages texte ---
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text?.trim();
-
-  if (!text || text.startsWith("/")) return;
- // 🔹 Anti-spam
-  if (checkSpam(chatId)) {
-    return bot.sendMessage(
-      chatId,
-      "⚠️ Trop d’actions rapides. Patiente quelques secondes."
-    );
-  }
-
 
   // Parrainage
   if (text === "🤝 Parrainage") {
@@ -562,7 +504,7 @@ bot.on("message", async (msg) => {
   }
 });
 
-// === COMMANDES ===
+// === COMMANDES ADMIN ===
 bot.onText(/\/admin/, async (msg) => {
   if (!ADMIN_IDS.includes(msg.from.id)) return;
 
@@ -572,7 +514,9 @@ bot.onText(/\/admin/, async (msg) => {
       return bot.sendMessage(msg.chat.id, "✅ Aucune vérification en attente.");
 
     for (const row of rows) {
-      const text = `🧾 <b>Nouvelle demande</b>\n👤 @${row.username} (ID: ${row.telegram_id})\n📱 Bookmaker: ${row.bookmaker}\n💰 Montant: ${row.amount} FCFA\n🆔 Dépôt: <code>${row.deposit_id}</code>`;
+      const username = row.username ? `@${row.username}` : "Utilisateur sans pseudo";
+
+      const text = `🧾 <b>Nouvelle demande</b>\n👤 ${username} (ID: ${row.telegram_id})\n📱 Bookmaker: ${row.bookmaker}\n💰 Montant: ${row.amount} FCFA\n🆔 Dépôt: <code>${row.deposit_id}</code>`;
 
       const opts = {
         parse_mode: "HTML",
@@ -593,10 +537,10 @@ bot.onText(/\/admin/, async (msg) => {
   }
 });
 
-const pendingCustomRejects = {}; // Pour stocker les ID en attente de motif personnalisé
+const pendingCustomRejects = {}; // Stockage des rejets personnalisés
 
 // =====================
-// GESTION DES CALLBACKS
+// GESTION CALLBACKS
 // =====================
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
@@ -605,6 +549,8 @@ bot.on("callback_query", async (query) => {
   const data = query.data;
 
   try {
+    await bot.answerCallbackQuery(query.id); // Stop le loader Telegram
+
     // ---------------- ADMIN VALIDATION ----------------
     if (data.startsWith("validate_") && ADMIN_IDS.includes(adminId)) {
       const telegramId = data.split("_")[1];
@@ -615,21 +561,35 @@ bot.on("callback_query", async (query) => {
       if (rows.length === 0) return;
 
       const user = rows[0];
-      await pool.query(
-        "INSERT INTO verified_users (telegram_id, username, bookmaker, deposit_id, amount) VALUES ($1,$2,$3,$4,$5)",
-        [user.telegram_id, user.username, user.bookmaker, user.deposit_id, user.amount]
+
+      // Vérifie si déjà validé
+      const checkUser = await pool.query(
+        "SELECT 1 FROM verified_users WHERE telegram_id = $1",
+        [user.telegram_id]
       );
+      if (checkUser.rows.length === 0) {
+        await pool.query(
+          "INSERT INTO verified_users (telegram_id, username, bookmaker, deposit_id, amount) VALUES ($1,$2,$3,$4,$5)",
+          [user.telegram_id, user.username, user.bookmaker, user.deposit_id, user.amount]
+        );
+      }
+
       await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
 
-      await bot.sendMessage(user.telegram_id, "✅ Ton compte a été validé avec succès !", {
-        reply_markup: {
-          keyboard: [["🎯 Pronostics du jour"]],
-          resize_keyboard: true,
-          remove_keyboard: true,
-        },
-      });
+      // Message de confirmation avec bouton temporaire 🎯 Obtenir Pronostics du jour
+      await bot.sendMessage(
+        user.telegram_id,
+        "✅ Ton compte a été validé avec succès !\nClique sur le bouton 🎯 pour obtenir le pronostic du jour.",
+        {
+          reply_markup: {
+            keyboard: [["🎯 Obtenir Pronostics du jour"]],
+            resize_keyboard: true,
+            one_time_keyboard: true, // disparaît après clic
+          },
+        }
+      );
 
-      return bot.sendMessage(chatId, `✅ Validation de @${user.username} confirmée.`);
+      return bot.sendMessage(chatId, `✅ Validation de @${user.username || "Utilisateur"} confirmée.`);
     }
 
     // ---------------- ADMIN REJET ----------------
@@ -690,9 +650,8 @@ bot.on("callback_query", async (query) => {
         );
       }
 
-      // Supprime le clavier inline si présent
-      const replyMarkup = query.message.reply_markup;
-      if (replyMarkup?.inline_keyboard?.length) {
+      // Supprime le bouton 🎯 après clic
+      if (query.message.reply_markup?.keyboard?.length) {
         await bot.editMessageReplyMarkup(
           { inline_keyboard: [] },
           { chat_id: chatId, message_id: messageId }
@@ -715,37 +674,28 @@ bot.on("callback_query", async (query) => {
 
       const { content, media_type, media_url } = resProno.rows[0];
 
+      // Envoi média
       if (media_url && media_type) {
         switch (media_type) {
-          case "photo":
-            await bot.sendPhoto(chatId, media_url);
-            break;
-          case "video":
-            await bot.sendVideo(chatId, media_url);
-            break;
-          case "voice":
-            await bot.sendVoice(chatId, media_url);
-            break;
-          case "audio":
-            await bot.sendAudio(chatId, media_url);
-            break;
-          case "video_note":
-            await bot.sendVideoNote(chatId, media_url);
-            break;
-          default:
-            console.warn("Type de média inconnu :", media_type);
+          case "photo": await bot.sendPhoto(chatId, media_url); break;
+          case "video": await bot.sendVideo(chatId, media_url); break;
+          case "voice": await bot.sendVoice(chatId, media_url); break;
+          case "audio": await bot.sendAudio(chatId, media_url); break;
+          case "video_note": await bot.sendVideoNote(chatId, media_url); break;
         }
       }
 
       if (content) await bot.sendMessage(chatId, content, { parse_mode: "HTML" });
-      return sendMainMenu(chatId); // Retour au menu principal
+
+      // Affiche le menu principal après avoir envoyé le pronostic
+      await sendMainMenu(chatId);
     }
+
   } catch (err) {
     console.error("Erreur callback_query:", err);
     await bot.sendMessage(chatId, "❌ Une erreur est survenue, réessaie plus tard.");
   }
-}); // ✅ fermeture callback_query
-
+});
 
 // =====================
 // GESTION DES MESSAGES
@@ -807,6 +757,43 @@ bot.on("message", async (msg) => {
     delete pendingCustomRejects[chatId];
   }
 });
+
+// =====================
+// MENU PRINCIPAL
+// =====================
+async function sendMainMenu(chatId) {
+  try {
+    const res = await pool.query(
+      "SELECT * FROM verified_users WHERE telegram_id = $1",
+      [chatId]
+    );
+
+    const isVerified = res.rows.length > 0;
+
+    const keyboard = isVerified
+      ? [
+          ["🏆 Mes Points"],
+          ["🤝 Parrainage", "🆘 Assistance 🤖"],
+        ]
+      : [["🎯 Obtenir Pronostics du jour"]];
+
+    const message = isVerified
+      ? "Bienvenue sur *1XBOOM* !"
+      : "Clique sur le bouton 🎯 Obtenir Pronostics du jour pour accéder aux pronostics.";
+
+    await bot.sendMessage(chatId, message, {
+      reply_markup: {
+        keyboard,
+        resize_keyboard: true,
+        one_time_keyboard: !isVerified, // bouton temporaire pour les nouveaux validés
+      },
+      parse_mode: "Markdown",
+    });
+  } catch (err) {
+    console.error("Erreur menu :", err);
+    bot.sendMessage(chatId, "❌ Une erreur est survenue lors du chargement du menu.");
+  }
+}
 
 
 /////////////////////////////////////// ✅ VOIRE LE CLASSEMENT DE PARRAIN ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
