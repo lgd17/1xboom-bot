@@ -375,27 +375,27 @@ bot.on("message", async (msg) => {
   try {
     // 🎯 Cas : bouton pronostic du jour
     if (text === "🎯 Pronostics du jour") {
-      const res = await pool.query("SELECT * FROM verified_users WHERE telegram_id = $1", [chatId]);
+  const res = await pool.query("SELECT * FROM verified_users WHERE telegram_id = $1", [chatId]);
 
-      if (res.rows.length === 0) {
-        userStates[chatId] = { step: "await_bookmaker" };
-        startTimeout(chatId, bot);
-        return bot.sendMessage(chatId, "🔐 *Pour accéder aux pronostics, indique ton bookmaker :*", {
-          parse_mode: "Markdown",
-          reply_markup: {
-            keyboard: [
-              ["1xbet", "888starz"],
-              ["melbet", "winwin"],
-            ],
-            resize_keyboard: true,
-            remove_keyboard: true,
-          },
-        });
-      }
+  if (res.rows.length === 0) {
+    userStates[chatId] = { step: "await_bookmaker" };
+    startTimeout(chatId, bot);
+    return bot.sendMessage(chatId, "🔐 *Pour accéder aux pronostics, indique ton bookmaker :*", {
+      parse_mode: "Markdown",
+      reply_markup: {
+        keyboard: [
+          ["1xbet", "888starz"],
+          ["melbet", "winwin"],
+        ],
+        resize_keyboard: true,
+        remove_keyboard: true,
+      },
+    });
+  }
 
-      // Si déjà vérifié, on peut envoyer un simple message de confirmation
-      return bot.sendMessage(chatId, "✅ Tu es déjà vérifié. Continue à profiter du bot !");
-    }
+  // ✅ utilisateur déjà validé → on fait rien ici
+  // Le flux se fera via le bouton inline "get_prono"
+}
 
     // 🔁 Si une étape est en cours
     if (state) {
