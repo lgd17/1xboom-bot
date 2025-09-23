@@ -730,37 +730,57 @@ bot.on("callback_query", async (query) => {
       // Récupère la date du jour au format YYYY-MM-DD
       const today = new Date().toISOString().slice(0, 10);
 
-      // Recherche le coupon du jour
+      // Recherche le coupon du jour (gratuit)
       const res = await pool.query(
-        "SELECT content FROM daily_pronos WHERE date = $1 LIMIT 1",
+        `SELECT content, media_type, media_url 
+         FROM daily_pronos 
+         WHERE date_only = $1 AND type = 'gratuit' 
+         LIMIT 1`,
         [today]
       );
 
       if (res.rows.length === 0) {
-        await bot.sendMessage(chatId, "⚠️ Le pronostic du jour n'est pas encore disponible.");
+        await bot.sendMessage(chatId, "⚠️ Aucun pronostic du jour n'est encore disponible.");
       } else {
-        const coupon = res.rows[0].content;
+        const { content, media_type, media_url } = res.rows[0];
 
-        // Envoie le coupon du jour
-        await bot.sendMessage(chatId, `🎯 Pronostic du jour :\n\n${coupon}`, {
-          parse_mode: "Markdown"
-        });
-
-        // Affiche le menu principal avec 3 boutons
-        await bot.sendMessage(chatId, "📋 Menu principal :", {
-          reply_markup: {
-            keyboard: [["🏆 Mes Points", "🤝 Parrainage"], ["🆘 Assistance"]
-            ],
-            resize_keyboard: true
+        // Envoie le média si présent
+        if (media_url && media_type) {
+          switch (media_type) {
+            case "photo":
+              await bot.sendPhoto(chatId, media_url);
+              break;
+            case "video":
+              await bot.sendVideo(chatId, media_url);
+              break;
+            case "voice":
+              await bot.sendVoice(chatId, media_url);
+              break;
+            case "audio":
+              await bot.sendAudio(chatId, media_url);
+              break;
+            case "video_note":
+              await bot.sendVideoNote(chatId, media_url);
+              break;
+            default:
+              console.warn("Type de média inconnu :", media_type);
           }
-        });
+        }
+
+        // Envoie le texte en HTML
+        if (content) await bot.sendMessage(chatId, content, { parse_mode: "HTML" });
       }
+
+      // Affiche ensuite le menu principal
+      await sendMainMenu(chatId);
+
     } catch (error) {
       console.error("Erreur lors de l'envoi du pronostic :", error);
       await bot.sendMessage(chatId, "❌ Une erreur est survenue, réessaie plus tard.");
     }
   }
 });
+
 
   // Gestion du motif personnalisé
   const pendingId = pendingCustomRejects[chatId];
