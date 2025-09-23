@@ -601,6 +601,9 @@ bot.onText(/\/admin/, async (msg) => {
 
 const pendingCustomRejects = {}; // Pour stocker les ID en attente de motif personnalisé
 
+// =====================
+// GESTION DES CALLBACKS
+// =====================
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
   const adminId = query.from.id;
@@ -635,7 +638,7 @@ bot.on("callback_query", async (query) => {
       return bot.sendMessage(chatId, `✅ Validation de @${user.username} confirmée.`);
     }
 
- // ---------------- ADMIN REJET ----------------
+    // ---------------- ADMIN REJET ----------------
     if (data.startsWith("reject_") && ADMIN_IDS.includes(adminId)) {
       const telegramId = data.split("_")[1];
       const motifs = [
@@ -644,7 +647,10 @@ bot.on("callback_query", async (query) => {
         [{ text: "📝 Autres raisons", callback_data: `motif3_${telegramId}` }],
       ];
 
-      return bot.editMessageReplyMarkup({ inline_keyboard: motifs }, { chat_id: chatId, message_id: messageId });
+      return bot.editMessageReplyMarkup(
+        { inline_keyboard: motifs },
+        { chat_id: chatId, message_id: messageId }
+      );
     }
 
     // ---------------- ADMIN REJETS RAPIDES ----------------
@@ -676,43 +682,27 @@ bot.on("callback_query", async (query) => {
       return bot.sendMessage(chatId, "✍️ Envoie manuellement le motif de rejet pour l’utilisateur.");
     }
 
-// Réception d’un motif personnalisé
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text?.trim();
-
-  // 🔁 recommencer
-  if (text === "🔁 recommencer") {
-    userStates[chatId] = { step: "await_bookmaker" };
-
-    return bot.sendMessage(chatId, "🔐 Pour accéder aux pronostics, indique ton bookmaker :", {
-      reply_markup: {
-        keyboard: [["1xbet", "888starz"], ["melbet", "winwin"]],
-        resize_keyboard: true,
-        one_time_keyboard: true
-      }
-    });
-  }
-
-  if (text === "🆘 contacter l'assistance") {
-    return bot.sendMessage(chatId, "📩 Contacte notre équipe ici : [@Support_1XBOOM](https://t.me/Catkatii)", {
-      parse_mode: "Markdown",
-      disable_web_page_preview: true
-    });
-  }
-
-
-if (data === "get_prono") {
+    // ---------------- GET PRONO ----------------
+    if (data === "get_prono") {
       // Vérifie si l'utilisateur est validé
-      const resUser = await pool.query("SELECT * FROM verified_users WHERE telegram_id = $1", [chatId]);
+      const resUser = await pool.query(
+        "SELECT * FROM verified_users WHERE telegram_id = $1",
+        [chatId]
+      );
       if (resUser.rows.length === 0) {
-        return bot.sendMessage(chatId, "🔒 Tu dois d'abord valider ton compte pour obtenir les pronostics.");
+        return bot.sendMessage(
+          chatId,
+          "🔒 Tu dois d'abord valider ton compte pour obtenir les pronostics."
+        );
       }
 
-      // Supprime le clavier inline seulement si il existe
+      // Supprime le clavier inline si présent
       const replyMarkup = query.message.reply_markup;
       if (replyMarkup?.inline_keyboard?.length) {
-        await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: messageId });
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: [] },
+          { chat_id: chatId, message_id: messageId }
+        );
       }
 
       // Récupère le pronostic du jour
@@ -754,14 +744,46 @@ if (data === "get_prono") {
       }
 
       if (content) await bot.sendMessage(chatId, content, { parse_mode: "HTML" });
-      return sendMainMenu(chatId); // Affiche le menu principal
+      return sendMainMenu(chatId); // Retour au menu principal
     }
   } catch (err) {
     console.error("Erreur callback_query:", err);
     await bot.sendMessage(chatId, "❌ Une erreur est survenue, réessaie plus tard.");
   }
-});
+}); // ✅ fermeture callback_query
 
+
+// =====================
+// GESTION DES MESSAGES
+// =====================
+bot.on("message", async (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text?.trim();
+
+  // 🔁 recommencer
+  if (text === "🔁 recommencer") {
+    userStates[chatId] = { step: "await_bookmaker" };
+
+    return bot.sendMessage(chatId, "🔐 Pour accéder aux pronostics, indique ton bookmaker :", {
+      reply_markup: {
+        keyboard: [["1xbet", "888starz"], ["melbet", "winwin"]],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+      },
+    });
+  }
+
+  // Assistance
+  if (text === "🆘 contacter l'assistance") {
+    return bot.sendMessage(
+      chatId,
+      "📩 Contacte notre équipe ici : [@Support_1XBOOM](https://t.me/Catkatii)",
+      {
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
+      }
+    );
+  }
 
   // Gestion du motif personnalisé
   const pendingId = pendingCustomRejects[chatId];
@@ -777,8 +799,8 @@ if (data === "get_prono") {
           reply_markup: {
             keyboard: [["🔁 recommencer", "🆘 contacter l'assistance"]],
             resize_keyboard: true,
-            one_time_keyboard: true
-          }
+            one_time_keyboard: true,
+          },
         }
       );
 
@@ -791,7 +813,6 @@ if (data === "get_prono") {
     delete pendingCustomRejects[chatId];
   }
 });
-
 
 
 /////////////////////////////////////// ✅ VOIRE LE CLASSEMENT DE PARRAIN ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
