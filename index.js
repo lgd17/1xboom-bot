@@ -715,20 +715,22 @@ bot.on("message", async (msg) => {
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text?.trim();
+// 🔁 recommencer
+if (text === "🔁 recommencer") {
+  userStates[chatId] = { step: "await_bookmaker" };
 
-  // 🔁 recommencer
-  if (text === "🔁 recommencer") {
-    userStates[chatId] = { step: "await_bookmaker" };
-
-    return bot.sendMessage(chatId, "🔐 *Pour accéder aux pronostics, indique ton bookmaker :*", {
-      parse_mode: "Markdown",
-      reply_markup: {
-        keyboard: [["1xbet", "888starz"], ["melbet", "winwin"]],
-        resize_keyboard: true,
-        one_time_keyboard: true,
-      },
-    });
-  }
+  return bot.sendMessage(chatId, "🔐 *Pour accéder aux pronostics, indique ton bookmaker :*", {
+    parse_mode: "Markdown",
+    reply_markup: {
+      keyboard: [
+        ["1xbet", "888starz"],
+        ["melbet", "winwin"]
+      ],
+      resize_keyboard: true,
+      one_time_keyboard: true
+    }
+  });
+}
 
   // Assistance
   if (text === "🆘 contacter l'assistance") {
