@@ -35,7 +35,7 @@ const userLang = {};
 const fixedAddStates = {};
 const fixedEditStates = {};
 const editStates = {};
-
+const pendingCustomRejects = {};
 
 // ==========================
 // 🚀 PLANIFICATION AUTOMATIQUE
@@ -77,40 +77,99 @@ setInterval(ping, 14 * 60 * 1000); // répéter toutes les 14 minutes
 
 
 
-// ====== POSTGRESQL ======
+//------------------ START-MENU -----------------------------------
+
+bot.onText(/\/start/, async (msg) => {
+  const chatId = msg.chat.id;
+
+  try {
+    const res = await pool.query(
+      "SELECT * FROM verified_users WHERE telegram_id = $1",
+      [chatId]
+    );
+
+    if (res.rows.length === 0) {
+      // ✅ Pas encore validé → menu minimal
+      return bot.sendMessage(
+        chatId,
+        "👋 Bienvenue !\n\nPour accéder aux *pronostics du jour*, clique ci-dessous :",
+        {
+          parse_mode: "Markdown",
+          reply_markup: {
+            keyboard: [["🎯 Pronostics du jour"]],
+            resize_keyboard: true,
+          },
+        }
+      );
+    }
+
+    // ✅ Déjà validé → menu classique
+    return bot.sendMessage(chatId, "👋 Ravi de te revoir !", {
+      parse_mode: "Markdown",
+      reply_markup: {
+        keyboard: [
+          ["🏆 Mes Points"],
+            ["🤝 Parrainage", "🆘 Assistance 🤖"]
+          ],
+        resize_keyboard: true,
+      },
+    });
+  } catch (err) {
+    console.error("Erreur /start:", err);
+    return bot.sendMessage(chatId, "❌ Erreur interne, réessaie plus tard.");
+  }
+});
+
+// ====== START avec parrainage ======
 bot.onText(/\/start(?:\s+(\d+))?/, async (msg, match) => {
   const chatId = msg.chat.id;
   const referrerId = match[1]; // ID du parrain s’il existe
 
-  // Vérifie si déjà validé
-  const existingUser = await pool.query(
-    "SELECT * FROM verified_users WHERE telegram_id = $1",
-    [chatId]
-  );
-  if (existingUser.rows.length > 0) {
-    return bot.sendMessage(chatId, "✅ Tu es déjà inscrit !");
-  }
+  try {
+    // Vérifie si déjà validé
+    const existingUser = await pool.query(
+      "SELECT * FROM verified_users WHERE telegram_id = $1",
+      [chatId]
+    );
 
-  // Stocke dans l'état utilisateur pour suivre l’étape
-  userStates[chatId] = { step: "await_bookmaker", referrerId };
-
-  startTimeout(chatId, bot);
-  return bot.sendMessage(
-    chatId,
-    "🔐 *Pour accéder aux pronostics, indique ton bookmaker :*",
-    {
-      parse_mode: "Markdown",
-      reply_markup: {
-        keyboard: [
-          ["1xbet", "888starz"],
-          ["melbet", "winwin"],
-        ],
-        resize_keyboard: true,
-        remove_keyboard: true,
-      },
+    if (existingUser.rows.length > 0) {
+      // ✅ Déjà validé → menu classique
+      return bot.sendMessage(chatId, "*👋 Ravi de te revoir !*", {
+        parse_mode: "Markdown",
+        reply_markup: {
+          keyboard: [
+            ["🏆 Mes Points"],
+            ["🤝 Parrainage", "🆘 Assistance 🤖"],
+          ],
+          resize_keyboard: true,
+        },
+      });
     }
-  );
+
+    // 🚨 Pas encore validé → stocke parrain (si présent) et affiche bouton Pronostics
+    userStates[chatId] = { referrerId };
+
+    return bot.sendMessage(
+      chatId,
+      "*👋 Bienvenue !*\n\n*Pour accéder aux pronostics, clique sur le bouton ci-dessous 👇*",
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          keyboard: [["🎯 Pronostics du jour"]],
+          resize_keyboard: true,
+        },
+      }
+    );
+  } catch (err) {
+    console.error("Erreur /start :", err);
+    return bot.sendMessage(
+      chatId,
+      "*⚠️ Une erreur est survenue, réessaie plus tard.*",
+      { parse_mode: "Markdown" }
+    );
+  }
 });
+
 
 // =================== PARRAINAGE CANAL AUTOMATIQUE ===================
 
@@ -244,13 +303,6 @@ bot.on("message", async (msg) => {
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
 
-// 🔹 Anti-spam
-  if (checkSpam(chatId)) {
-    return bot.answerCallbackQuery(query.id, {
-      text: "⚠️ Trop de clics rapides. Patiente un peu.",
-      show_alert: true,
-    });
-  }
 
   const data = query.data;
 
