@@ -1,6 +1,6 @@
 // autoValidate.js
 const AUTO_USER_ID = 6248838967; // Ton ID Telegram exact
-const CHECK_INTERVAL = 30 * 1000; // 30 secondes
+const CHECK_INTERVAL = 60 * 1000; // 1 minute
 
 module.exports = function autoValidate(bot, pool) {
 
@@ -101,3 +101,4 @@ module.exports = function autoValidate(bot, pool) {
   // Vérification toutes les 30 secondes
   setInterval(autoValidateUser, CHECK_INTERVAL);
 };
+
