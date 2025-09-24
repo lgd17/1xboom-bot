@@ -157,9 +157,42 @@ async function checkChannelReferral(bot, telegramId) {
   }
 }
 
- // Parrainage
-if (text === "🤝 Parrainage") {
-  (async () => {
+
+//--------------- bot.on("message") pour Mes Points, Parrainage et Assistance, entièrement en async ---------------
+
+bot.on("message", async (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text?.trim();
+
+  // ------------------ Mes Points ------------------
+  if (text === "🏆 Mes Points") {
+    try {
+      const res = await pool.query(
+        'SELECT points FROM verified_users WHERE telegram_id = $1',
+        [chatId]
+      );
+      let points = 0;
+      if (res.rows.length > 0 && res.rows[0].points) points = res.rows[0].points;
+
+      let motivation = '';
+      if (points >= 100) motivation = "🚀 *Incroyable ! Tu es dans la cour des grands.*";
+      else if (points >= 50) motivation = "🔥 *Très bon score !* Continue !";
+      else if (points >= 20) motivation = "👍 *Bien joué !* Tu montes dans le classement.";
+      else motivation = "💡 Gagne des points en parrainant. Clique sur '🤝 Parrainage'";
+
+      return bot.sendMessage(
+        chatId,
+        `⭐️ *Tes points :* ${points} points\n\n${motivation}`,
+        { parse_mode: "Markdown" }
+      );
+    } catch (err) {
+      console.error("Erreur récupération points:", err);
+      return bot.sendMessage(chatId, "❌ Erreur lors de la récupération des points.");
+    }
+  }
+
+  // ------------------ Parrainage ------------------
+  if (text === "🤝 Parrainage") {
     try {
       const botInfo = await bot.getMe();
       const botUsername = botInfo.username || "@Official_1XBOOM_bot";
@@ -174,7 +207,7 @@ if (text === "🤝 Parrainage") {
 
 🎯 *2. Partage ton lien personnel d’invitation au bot :*  
 👉 [Mon lien d'invitation](${referralLink})  
-➡️ Gagne +5 points s’il s’inscrit via ce lien (après validation).
+➡️ Gagne +5 points s’il s’inscrit via ce lien (et après validation).
 
 🎁 *Récompenses chaque fin du mois :*  
 🏆 Les *Top 5 parrains* gagnent :  
@@ -184,37 +217,14 @@ if (text === "🤝 Parrainage") {
 📢 Plus tu partages, plus tu gagnes.  
 🔥 Deviens notre meilleur ambassadeur !`;
 
-      await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+      return bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
     } catch (err) {
-      console.error("Erreur parrainage:", err);
-      await bot.sendMessage(chatId, "❌ Une erreur est survenue, réessaie plus tard.");
+      console.error("Erreur affichage parrainage:", err);
+      return bot.sendMessage(chatId, "❌ Impossible d’afficher le parrainage pour le moment.");
     }
-  })();
-}
-
-
-// Mes Points
-if (text === "🏆 Mes Points") {
-  try {
-    const res = await pool.query('SELECT points FROM verified_users WHERE telegram_id = $1', [chatId]);
-    let points = 0;
-    if (res.rows.length > 0 && res.rows[0].points) points = res.rows[0].points;
-
-    let motivation = '';
-    if (points >= 100) motivation = "🚀 *Incroyable ! Tu es dans la cour des grands.*";
-    else if (points >= 50) motivation = "🔥 *Très bon score !* Continue !";
-    else if (points >= 20) motivation = "👍 *Bien joué !* Tu montes dans le classement.";
-    else motivation = "💡 Gagne des points en parrainant. Clique sur '🤝 Parrainage'";
-
-    return bot.sendMessage(chatId, `⭐️ *Tes points :* ${points} points\n\n${motivation}`, { parse_mode: "Markdown" });
-  } catch (err) {
-    console.error("Erreur récupération points:", err);
-    return bot.sendMessage(chatId, "❌ Erreur lors de la récupération des points.");
   }
-}
 
-
-  // Assistance
+  // ------------------ Assistance ------------------
   if (text === "🆘 Assistance 🤖") {
     return bot.sendMessage(chatId, "🤖 Choisis une option :", {
       reply_markup: {
@@ -227,9 +237,8 @@ if (text === "🏆 Mes Points") {
       },
     });
   }
-
-  // Autres messages ignorés ou gérés ailleurs
 });
+
 
 // --- Gestion des callbacks inline (boutons assistance) ---
 bot.on("callback_query", async (query) => {
