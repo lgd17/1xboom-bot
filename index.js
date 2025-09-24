@@ -20,6 +20,10 @@ const generateCouponAmerica = require("./generateCouponAmerica");
 const generateCouponAsia = require("./generateCouponAsia");
 const { formatMatchTips } = require("./couponUtils");
 const { t } = require("./lang");
+const autoValidate = require("./autoValidate");
+
+// Après avoir défini `bot` et `pool`
+autoValidate(bot, pool);
 
 // ====== CONFIGURATION ENV ======
 const PORT = process.env.PORT || 3000;
