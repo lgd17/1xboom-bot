@@ -698,10 +698,6 @@ bot.on("callback_query", async (query) => {
     return bot.sendMessage(chatId, "✍️ Envoie manuellement le motif de rejet pour l’utilisateur.");
   }
 });
-
-
-// =====================
-// GESTION DES MESSAGES
 // =====================
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
@@ -711,45 +707,16 @@ bot.on("message", async (msg) => {
   if (text === "🔁 recommencer") {
     userStates[chatId] = { step: "await_bookmaker" };
 
-    // =====================
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text?.trim();
-// 🔁 recommencer
-if (text === "🔁 recommencer") {
-  userStates[chatId] = { step: "await_bookmaker" };
-
-  return bot.sendMessage(chatId, "🔐 *Pour accéder aux pronostics, indique ton bookmaker :*", {
-    parse_mode: "Markdown",
-    reply_markup: {
-      keyboard: [
-        ["1xbet", "888starz"],
-        ["melbet", "winwin"]
-      ],
-      resize_keyboard: true,
-      one_time_keyboard: true
-    }
-  });
-}
-
-  // Assistance
-  if (text === "🆘 contacter l'assistance") {
-    return bot.sendMessage(
-      chatId,
-      "📩 Contacte notre équipe ici : [@Support_1XBOOM](https://t.me/Catkatii)",
-      {
-        parse_mode: "Markdown",
-        disable_web_page_preview: true,
-      }
-    );
-  }
-});
-
+    return bot.sendMessage(chatId, "🔐 *Pour accéder aux pronostics, indique ton bookmaker :*", {
+      parse_mode: "Markdown",
       reply_markup: {
-        keyboard: [["1xbet", "888starz"], ["melbet", "winwin"]],
+        keyboard: [
+          ["1xbet", "888starz"],
+          ["melbet", "winwin"]
+        ],
         resize_keyboard: true,
-        one_time_keyboard: true,
-      },
+        one_time_keyboard: true
+      }
     });
   }
 
@@ -760,7 +727,7 @@ if (text === "🔁 recommencer") {
       "📩 Contacte notre équipe ici : [@Support_1XBOOM](https://t.me/Catkatii)",
       {
         parse_mode: "Markdown",
-        disable_web_page_preview: true,
+        disable_web_page_preview: true
       }
     );
   }
@@ -777,10 +744,12 @@ if (text === "🔁 recommencer") {
         `🔁 Tu peux recommencer la procédure ou contacter l’assistance.`,
         {
           reply_markup: {
-            keyboard: [["🔁 recommencer", "🆘 contacter l'assistance"]],
+            keyboard: [
+              ["🔁 recommencer", "🆘 contacter l'assistance"]
+            ],
             resize_keyboard: true,
-            one_time_keyboard: true,
-          },
+            one_time_keyboard: true
+          }
         }
       );
 
@@ -793,10 +762,6 @@ if (text === "🔁 recommencer") {
     delete pendingCustomRejects[chatId];
   }
 });
-
-// =====================
-// MENU PRINCIPAL
-// =====================
 
 /////////////////////////////////////// ✅ VOIRE LE CLASSEMENT DE PARRAIN ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 //=== COMMANDE /topparrains ====
