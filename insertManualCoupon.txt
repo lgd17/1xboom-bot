@@ -1,19 +1,19 @@
-// --- Fonction d'insertion sécurisée (par date_only uniquement) ---
-async function insertManualCoupon(content, mediaUrl, mediaType, dateOnly, type = "gratuit") {
+// --- insertManualCoupon adapté pour file_id avec type par défaut ---
+async function insertManualCoupon(content, mediaFileId, mediaType, dateOnly, type = "gratuit") {
   try {
     if (!dateOnly) throw new Error("Date manquante");
 
-    // Normalisation de la date_only (YYYY-MM-DD uniquement)
+    // Normalisation de date_only (YYYY-MM-DD)
     let normalizedDate;
     if (dateOnly instanceof Date) {
-      normalizedDate = dateOnly.toISOString().split("T")[0]; // "2025-09-25"
+      normalizedDate = dateOnly.toISOString().slice(0, 10);
     } else if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
       normalizedDate = dateOnly;
     } else {
-      throw new Error("Format de date_only invalide: " + dateOnly);
+      throw new Error("Format de date_only invalide : " + dateOnly);
     }
 
-    // --- Insertion avec UPSERT sur date_only ---
+    // Insertion avec UPSERT sur date_only
     await pool.query(
       `
       INSERT INTO daily_pronos (content, media_url, media_type, date_only, type)
@@ -24,7 +24,7 @@ async function insertManualCoupon(content, mediaUrl, mediaType, dateOnly, type =
           media_type = EXCLUDED.media_type,
           type = EXCLUDED.type
       `,
-      [content, mediaUrl, mediaType, normalizedDate, type]
+      [content, mediaFileId, mediaType, normalizedDate, type]
     );
 
     return { success: true };
@@ -33,3 +33,6 @@ async function insertManualCoupon(content, mediaUrl, mediaType, dateOnly, type =
     return { success: false, error: err };
   }
 }
+
+module.exports = { insertManualCoupon };
+
