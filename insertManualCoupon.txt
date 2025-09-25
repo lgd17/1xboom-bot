@@ -34,5 +34,3 @@ async function insertManualCoupon(content, mediaFileId, mediaType, dateOnly, typ
   }
 }
 
-module.exports = { insertManualCoupon };
-
