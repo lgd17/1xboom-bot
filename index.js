@@ -1022,52 +1022,53 @@ const dayjs = require("dayjs");
 /////////////////////////////////////// ✅ VOIRE LES VÉRIFICATIONS EN ATTENTE ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 // ====================== AJOUT MANUEL DE PRONO ======================
 
-// --- Commande /ajouter_prono ---
+// ====================== AJOUT MANUEL DE PRONO ======================
+
 bot.onText(/\/ajouter_prono/, (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
+
   if (!ADMIN_IDS.includes(userId))
     return bot.sendMessage(chatId, "🚫 Commande réservée à l’admin.");
 
   pendingCoupon[chatId] = {
     step: "awaiting_date",
-    type: "gratuit",
     date: null,
     content: null,
+    type: "gratuit", // par défaut
     mediaUrl: null,
     mediaType: null,
   };
 
   bot.sendMessage(
     chatId,
-    "📅 Envoie la date du prono (format : YYYY-MM-DD)\nOu tape /today pour aujourd’hui."
+    "📅 Envoie la date du prono (format : YYYY-MM-DD) ou tape /today pour aujourd’hui."
   );
 });
 
-// --- Raccourci /today ---
+// --- /today ---
 bot.onText(/\/today/, (msg) => {
   const chatId = msg.chat.id;
-  if (!pendingCoupon[chatId] || pendingCoupon[chatId].step !== "awaiting_date")
-    return;
+  const state = pendingCoupon[chatId];
+  if (!state || state.step !== "awaiting_date") return;
 
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
-
-  pendingCoupon[chatId].date = today.toISOString().slice(0, 10); // "YYYY-MM-DD"
-  pendingCoupon[chatId].step = "awaiting_content";
+  state.date = today.toISOString().slice(0, 10); // YYYY-MM-DD
+  state.step = "awaiting_content";
 
   bot.sendMessage(chatId, "📝 Envoie maintenant le texte du prono.");
 });
 
-// --- Gestion des étapes ---
+// --- Gestion des messages ---
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const state = pendingCoupon[chatId];
-  if (!state) return;
+  if (!state || msg.text?.startsWith("/")) return;
 
   // --- Étape 1 : Date ---
-  if (state.step === "awaiting_date" && msg.text) {
-    const inputDate = msg.text.trim();
+  if (state.step === "awaiting_date") {
+    const inputDate = msg.text?.trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(inputDate)) {
       return bot.sendMessage(chatId, "⚠️ Format invalide. Utilise YYYY-MM-DD.");
     }
@@ -1078,44 +1079,57 @@ bot.on("message", async (msg) => {
       return bot.sendMessage(chatId, "❌ La date ne peut pas être dans le passé.");
     }
 
-    state.date = inputDate; // YYYY-MM-DD
+    state.date = inputDate;
     state.step = "awaiting_content";
     return bot.sendMessage(chatId, "📝 Envoie maintenant le texte du prono.");
   }
 
   // --- Étape 2 : Contenu ---
-  if (state.step === "awaiting_content" && msg.text) {
-    state.content = msg.text;
-    state.step = "awaiting_media";
+  if (state.step === "awaiting_content") {
+    if (!msg.text || msg.text.trim().length < 5) {
+      return bot.sendMessage(chatId, "⚠️ Le texte du prono est trop court.");
+    }
 
-    return bot.sendMessage(
-      chatId,
-      "📸 Veux-tu ajouter une image/vidéo/audio au prono ?\n" +
-      "Envoie le média directement, ou tape /skip pour ignorer."
-    );
+    state.content = msg.text.trim();
+    state.step = "awaiting_type";
+
+    // --- Choix du type de prono ---
+    return bot.sendMessage(chatId, "🎯 Choisis le type de prono :", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Gratuit", callback_data: "type_gratuit" }],
+          [{ text: "Premium", callback_data: "type_premium" }]
+        ]
+      }
+    });
   }
 
-  // --- Étape 3 : Media ---
+  // --- Étape 3 : Média ---
   if (state.step === "awaiting_media") {
+    let fileId = null;
+    let mediaType = null;
+
     if (msg.photo) {
-      const fileId = msg.photo[msg.photo.length - 1].file_id;
-      state.mediaUrl = await bot.getFileLink(fileId);
-      state.mediaType = "photo";
+      fileId = msg.photo.at(-1).file_id;
+      mediaType = "photo";
     } else if (msg.video) {
-      const fileId = msg.video.file_id;
-      state.mediaUrl = await bot.getFileLink(fileId);
-      state.mediaType = "video";
+      fileId = msg.video.file_id;
+      mediaType = "video";
     } else if (msg.document) {
-      const fileId = msg.document.file_id;
-      state.mediaUrl = await bot.getFileLink(fileId);
-      state.mediaType = "document";
+      fileId = msg.document.file_id;
+      mediaType = "document";
     } else if (msg.voice) {
-      const fileId = msg.voice.file_id;
-      state.mediaUrl = await bot.getFileLink(fileId);
-      state.mediaType = "voice";
+      fileId = msg.voice.file_id;
+      mediaType = "voice";
+    } else if (msg.audio) {
+      fileId = msg.audio.file_id;
+      mediaType = "audio";
+    } else if (msg.video_note) {
+      fileId = msg.video_note.file_id;
+      mediaType = "video_note";
     } else if (msg.text === "/skip") {
-      state.mediaUrl = null;
-      state.mediaType = null;
+      fileId = null;
+      mediaType = null;
     } else {
       return bot.sendMessage(
         chatId,
@@ -1123,62 +1137,79 @@ bot.on("message", async (msg) => {
       );
     }
 
-    // --- Récap ---
+    state.mediaUrl = fileId;
+    state.mediaType = mediaType;
+    state.step = "confirming";
+
+    // --- Récapitulatif ---
     const recap = `📝 <b>Récapitulatif du prono :</b>
 📅 Date : <b>${state.date}</b>
 ✍️ Contenu : <i>${state.content}</i>
-📎 Média : ${state.mediaType ? state.mediaType : "aucun"}
+📎 Média : ${mediaType ? mediaType : "aucun"}
+📌 Type : <b>${state.type}</b>
 `;
 
-    state.step = "confirming";
     return bot.sendMessage(chatId, recap, {
       parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: [
           [
             { text: "✅ Confirmer", callback_data: "confirm_prono" },
-            { text: "❌ Annuler", callback_data: "cancel_prono" },
-          ],
-        ],
-      },
+            { text: "❌ Annuler", callback_data: "cancel_prono" }
+          ]
+        ]
+      }
     });
   }
 });
 
-// --- Gestion de la confirmation ---
+// --- Gestion des boutons inline ---
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
   const state = pendingCoupon[chatId];
-  if (!state) return;
+  if (!state) return bot.answerCallbackQuery(query.id);
 
-  if (query.data === "confirm_prono") {
-    const result = await insertManualCoupon(
-      state.content,
-      state.mediaUrl,
-      state.mediaType,
-      state.date, // YYYY-MM-DD
-      state.type
-    );
+  // --- Choix du type ---
+  if (state.step === "awaiting_type") {
+    if (query.data === "type_gratuit") state.type = "gratuit";
+    if (query.data === "type_premium") state.type = "premium";
 
-    if (result.success) {
-      await bot.sendMessage(
-        chatId,
-        `✅ Coupon <b>${state.type.toUpperCase()}</b> ajouté pour le ${state.date}`,
-        { parse_mode: "HTML" }
+    state.step = "awaiting_media";
+    await bot.sendMessage(chatId, "📎 Envoie maintenant le média pour ce prono ou tape /skip.");
+  }
+
+  // --- Confirmation finale ---
+  if (state.step === "confirming") {
+    if (query.data === "confirm_prono") {
+      const result = await insertManualCoupon(
+        state.content,
+        state.mediaUrl,
+        state.mediaType,
+        state.date,
+        state.type
       );
-    } else {
-      await bot.sendMessage(chatId, "❌ Erreur lors de l’insertion du prono.");
+
+      if (result.success) {
+        await bot.sendMessage(
+          chatId,
+          `✅ Coupon <b>${state.type.toUpperCase()}</b> ajouté pour le ${state.date}`,
+          { parse_mode: "HTML" }
+        );
+      } else {
+        await bot.sendMessage(chatId, "❌ Erreur lors de l’insertion du prono : " + result.error.message);
+      }
+
+      delete pendingCoupon[chatId];
     }
 
-    delete pendingCoupon[chatId];
+    if (query.data === "cancel_prono") {
+      delete pendingCoupon[chatId];
+      await bot.sendMessage(chatId, "❌ Ajout annulé.");
+    }
   }
 
-  if (query.data === "cancel_prono") {
-    delete pendingCoupon[chatId];
-    await bot.sendMessage(chatId, "❌ Ajout annulé.");
-  }
+  await bot.answerCallbackQuery(query.id);
 });
-
 
 /////////////////////////////////////// ✅ VOIRE LES PRONOSTIQUE QUI SONT DISPO ✅\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 //=== COMMANDE /voir_pronos ===
