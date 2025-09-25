@@ -13,19 +13,39 @@ pool.on('error', (err) => {
   process.exit(-1);
 });
 
-// ✅ Fonction : insérer un prono manuel dans la table daily_pronos
-async function insertManualCoupon(content, mediaUrl, mediaType, date) {
-  const query = `
-    INSERT INTO daily_pronos (content, media_url, media_type, date)
-    VALUES ($1, $2, $3, $4)
-  `;
-  const values = [content, mediaUrl, mediaType, date];
-
+// --- Fonction d'insertion sécurisée (par date_only uniquement) ---
+async function insertManualCoupon(content, mediaUrl, mediaType, dateOnly, type = "gratuit") {
   try {
-    await pool.query(query, values);
-    console.log("✅ Prono inséré avec succès.");
+    if (!dateOnly) throw new Error("Date manquante");
+
+    // Normalisation de la date_only (YYYY-MM-DD uniquement)
+    let normalizedDate;
+    if (dateOnly instanceof Date) {
+      normalizedDate = dateOnly.toISOString().split("T")[0]; // "2025-09-25"
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+      normalizedDate = dateOnly;
+    } else {
+      throw new Error("Format de date_only invalide: " + dateOnly);
+    }
+
+    // --- Insertion avec UPSERT sur date_only ---
+    await pool.query(
+      `
+      INSERT INTO daily_pronos (content, media_url, media_type, date_only, type)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (date_only) DO UPDATE
+      SET content = EXCLUDED.content,
+          media_url = EXCLUDED.media_url,
+          media_type = EXCLUDED.media_type,
+          type = EXCLUDED.type
+      `,
+      [content, mediaUrl, mediaType, normalizedDate, type]
+    );
+
+    return { success: true };
   } catch (err) {
-    console.error("❌ Erreur lors de l'insertion :", err);
+    console.error("❌ Erreur lors de l'ajout manuel :", err);
+    return { success: false, error: err };
   }
 }
 
