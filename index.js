@@ -80,63 +80,19 @@ ping(); // ping immédiat au démarrage
 setInterval(ping, 14 * 60 * 1000); // répéter toutes les 14 minutes
 
 
-
-//------------------ START-MENU -----------------------------------
-
-bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-
-  try {
-    const res = await pool.query(
-      "SELECT * FROM verified_users WHERE telegram_id = $1",
-      [chatId]
-    );
-
-    if (res.rows.length === 0) {
-      // ✅ Pas encore validé → menu minimal
-      return bot.sendMessage(
-        chatId,
-        "👋 Bienvenue !\n\nPour accéder aux *pronostics du jour*, clique ci-dessous :",
-        {
-          parse_mode: "Markdown",
-          reply_markup: {
-            keyboard: [["🎯 Pronostics du jour"]],
-            resize_keyboard: true,
-          },
-        }
-      );
-    }
-
-    // ✅ Déjà validé → menu classique
-    return bot.sendMessage(chatId, "👋 Ravi de te revoir !", {
-      parse_mode: "Markdown",
-      reply_markup: {
-        keyboard: [
-          ["🏆 Mes Points"],
-            ["🤝 Parrainage", "🆘 Assistance 🤖"]
-          ],
-        resize_keyboard: true,
-      },
-    });
-  } catch (err) {
-    console.error("Erreur /start:", err);
-    return bot.sendMessage(chatId, "❌ Erreur interne, réessaie plus tard.");
-  }
-});
-
-// ====== START avec parrainage ======
+// ------------------ START (avec ou sans parrainage) ------------------
 bot.onText(/\/start(?:\s+(\d+))?/, async (msg, match) => {
   const chatId = msg.chat.id;
-  const referrerId = match[1]; // ID du parrain s’il existe
+  const referrerId = match[1] || null; // ID du parrain si fourni
+  console.log("Start reçu avec referrer:", referrerId);
 
   try {
-    // Vérifie si déjà validé
-    const existingUser = await pool.query(
+    const { rows } = await pool.query(
       "SELECT * FROM verified_users WHERE telegram_id = $1",
       [chatId]
     );
 
-    if (existingUser.rows.length > 0) {
+    if (rows.length > 0) {
       // ✅ Déjà validé → menu classique
       return bot.sendMessage(chatId, "*👋 Ravi de te revoir !*", {
         parse_mode: "Markdown",
@@ -150,12 +106,15 @@ bot.onText(/\/start(?:\s+(\d+))?/, async (msg, match) => {
       });
     }
 
-    // 🚨 Pas encore validé → stocke parrain (si présent) et affiche bouton Pronostics
-    userStates[chatId] = { referrerId };
+    // 🚨 Pas encore validé → sauvegarde le parrain s’il existe
+    if (referrerId) {
+      userStates[chatId] = { referrerId };
+    }
 
+    // Menu minimal avec accès aux pronostics
     return bot.sendMessage(
       chatId,
-      "*👋 Bienvenue !*\n\n*Pour accéder aux pronostics, clique sur le bouton ci-dessous 👇*",
+      "👋 *Bienvenue !*\n\n*Pour accéder aux *pronostics du jour*, clique ci-dessous :*",
       {
         parse_mode: "Markdown",
         reply_markup: {
@@ -166,11 +125,7 @@ bot.onText(/\/start(?:\s+(\d+))?/, async (msg, match) => {
     );
   } catch (err) {
     console.error("Erreur /start :", err);
-    return bot.sendMessage(
-      chatId,
-      "*⚠️ Une erreur est survenue, réessaie plus tard.*",
-      { parse_mode: "Markdown" }
-    );
+    return bot.sendMessage(chatId, "❌ Erreur interne, réessaie plus tard.");
   }
 });
 
@@ -594,15 +549,22 @@ await pool.query(
 
 // =================== COMMANDES ADMIN ===================
 bot.onText(/\/admin/, async (msg) => {
-  if (!ADMIN_IDS.includes(msg.from.id)) return;
+  const chatId = msg.chat.id;
+  const adminId = msg.from.id;
+
+  if (!ADMIN_IDS.includes(adminId)) return;
 
   try {
     const { rows } = await pool.query("SELECT * FROM pending_verifications");
     if (rows.length === 0)
-      return bot.sendMessage(msg.chat.id, "✅ Aucune vérification en attente.");
+      return bot.sendMessage(chatId, "✅ Aucune vérification en attente.");
 
     for (const row of rows) {
-      const text = `🧾 <b>Nouvelle demande</b>\n👤 @${row.username} (ID: ${row.telegram_id})\n📱 Bookmaker: ${row.bookmaker}\n💰 Montant: ${row.amount} FCFA\n🆔 Dépôt: <code>${row.deposit_id}</code>`;
+      const text = `<b>🧾 Nouvelle demande de dépôt</b>\n` +
+                   `👤 @${row.username} (ID: ${row.telegram_id})\n` +
+                   `📱 Bookmaker: ${row.bookmaker}\n` +
+                   `💰 Montant: ${row.amount} FCFA\n` +
+                   `🆔 Dépôt: <code>${row.deposit_id}</code>`;
 
       const opts = {
         parse_mode: "HTML",
@@ -616,7 +578,7 @@ bot.onText(/\/admin/, async (msg) => {
         }
       };
 
-      await bot.sendMessage(msg.chat.id, text, opts);
+      await bot.sendMessage(chatId, text, opts);
     }
   } catch (err) {
     console.error("Erreur /admin:", err);
@@ -632,6 +594,7 @@ bot.on("callback_query", async (query) => {
 
   if (!ADMIN_IDS.includes(adminId)) return;
 
+  // --- Validation d'un utilisateur ---
   if (data.startsWith("validate_")) {
     const telegramId = data.split("_")[1];
 
@@ -652,46 +615,45 @@ bot.on("callback_query", async (query) => {
 
         // ⚡ Si parrain présent, ajoute points
         if (user.referrer_id) {
-          await pool.query(
-            "UPDATE verified_users SET points = points + 5 WHERE telegram_id = $1",
-            [user.referrer_id]
-          );
+          await pool.query("UPDATE verified_users SET points = points + 5 WHERE telegram_id = $1", [user.referrer_id]);
           await bot.sendMessage(user.referrer_id, `🎉 Ton filleul @${user.username} vient d’être validé ! Tu gagnes +5 points.`);
         }
       }
 
+      // Supprime la demande en attente
       await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
 
-      // ------------------ ENVOI PRONOSTIC + MENU ------------------
+      // --- Envoi du pronostic du jour ---
       const today = new Date().toISOString().slice(0, 10);
-      const resProno = await pool.query(
-        `SELECT content, media_type, media_url 
-         FROM daily_pronos 
-         WHERE date_only = $1 AND type = 'gratuit' 
-         LIMIT 1`,
+      const { rows: pronoRows } = await pool.query(
+        `SELECT * FROM daily_pronos WHERE date_only = $1 AND type = 'gratuit' LIMIT 1`,
         [today]
       );
 
-      // Message même si pas de pronostic
-      if (resProno.rows.length > 0) {
-        const { content, media_type, media_url } = resProno.rows[0];
+      if (pronoRows.length > 0) {
+        const prono = pronoRows[0];
 
-        if (media_url && media_type) {
-          switch (media_type) {
-            case "photo": await bot.sendPhoto(user.telegram_id, media_url); break;
-            case "video": await bot.sendVideo(user.telegram_id, media_url); break;
-            case "voice": await bot.sendVoice(user.telegram_id, media_url); break;
-            case "audio": await bot.sendAudio(user.telegram_id, media_url); break;
-            case "video_note": await bot.sendVideoNote(user.telegram_id, media_url); break;
+        // Envoi du média si disponible
+        if (prono.media_url && prono.media_type) {
+          switch (prono.media_type) {
+            case "photo": await bot.sendPhoto(user.telegram_id, prono.media_url); break;
+            case "video": await bot.sendVideo(user.telegram_id, prono.media_url); break;
+            case "voice": await bot.sendVoice(user.telegram_id, prono.media_url); break;
+            case "audio": await bot.sendAudio(user.telegram_id, prono.media_url); break;
+            case "video_note": await bot.sendVideoNote(user.telegram_id, prono.media_url); break;
           }
         }
 
-        if (content) await bot.sendMessage(user.telegram_id, content, { parse_mode: "HTML" });
+        // Envoi du texte avec HTML et citation
+        if (prono.content) {
+          const messageHtml = `<b>🎯 Pronostic du jour</b>\n<blockquote>${escapeHtml(prono.content)}</blockquote>`;
+          await bot.sendMessage(user.telegram_id, messageHtml, { parse_mode: "HTML" });
+        }
       } else {
-        await bot.sendMessage(user.telegram_id, "⚠️ Aucun pronostic disponible pour le moment.", { parse_mode: "Markdown" });
+        await bot.sendMessage(user.telegram_id, "⚠️ Aucun pronostic disponible pour le moment.", { parse_mode: "HTML" });
       }
 
-      // Envoie du menu principal dans tous les cas
+      // --- Menu principal ---
       await bot.sendMessage(user.telegram_id, "📋 Menu principal :", {
         reply_markup: {
           keyboard: [
@@ -703,8 +665,7 @@ bot.on("callback_query", async (query) => {
         }
       });
 
-      return bot.sendMessage(chatId, `✅ Validation de @${user.username} confirmée et menu principal envoyé.`);
-
+      await bot.sendMessage(chatId, `✅ Validation de @${user.username} confirmée et menu principal envoyé.`);
     } catch (err) {
       console.error("Erreur validation:", err);
     }
