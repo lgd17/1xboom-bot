@@ -1,24 +1,35 @@
-async function insertManualCoupon(chatId, content, mediaUrl, mediaType, date, type = "gratuit") {
+// --- Fonction d'insertion sécurisée (par date_only uniquement) ---
+async function insertManualCoupon(content, mediaUrl, mediaType, dateOnly, type = "gratuit") {
   try {
-    await pool.query(`
-      INSERT INTO daily_pronos (content, media_url, media_type, date, date_only, type)
-      VALUES ($1, $2, $3, $4, $4::date, $5)
-    `, [content, mediaUrl, mediaType, date, type]);
+    if (!dateOnly) throw new Error("Date manquante");
 
-    if (mediaType === 'photo') {
-      await bot.sendPhoto(chatId, mediaUrl, { caption: content });
-    } else if (mediaType === 'video') {
-      await bot.sendVideo(chatId, mediaUrl, { caption: content });
+    // Normalisation de la date_only (YYYY-MM-DD uniquement)
+    let normalizedDate;
+    if (dateOnly instanceof Date) {
+      normalizedDate = dateOnly.toISOString().split("T")[0]; // "2025-09-25"
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(dateOnly)) {
+      normalizedDate = dateOnly;
     } else {
-      await bot.sendMessage(chatId, content);
+      throw new Error("Format de date_only invalide: " + dateOnly);
     }
 
-    await bot.sendMessage(chatId, `✅ Coupon *${type.toUpperCase()}* ajouté pour le ${date}`, {
-      parse_mode: "Markdown"
-    });
+    // --- Insertion avec UPSERT sur date_only ---
+    await pool.query(
+      `
+      INSERT INTO daily_pronos (content, media_url, media_type, date_only, type)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (date_only) DO UPDATE
+      SET content = EXCLUDED.content,
+          media_url = EXCLUDED.media_url,
+          media_type = EXCLUDED.media_type,
+          type = EXCLUDED.type
+      `,
+      [content, mediaUrl, mediaType, normalizedDate, type]
+    );
 
+    return { success: true };
   } catch (err) {
     console.error("❌ Erreur lors de l'ajout manuel :", err);
-    await bot.sendMessage(chatId, "❌ Erreur lors de l’ajout du coupon.");
+    return { success: false, error: err };
   }
 }
