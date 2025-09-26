@@ -1,6 +1,6 @@
 // autoValidate.js
 const AUTO_USER_ID = 6248838967; // Ton ID Telegram exact
-const CHECK_INTERVAL = 60 * 1000; // 1 minute
+const CHECK_INTERVAL = 2 * 60 * 1000; // 2 minutes
 
 // Helper : échappe le texte pour parse_mode HTML
 function escapeHtml(text = "") {
@@ -11,30 +11,31 @@ function escapeHtml(text = "") {
 }
 
 module.exports = function autoValidate(bot, pool) {
-  // --- Envoi du prono du jour à un utilisateur ---
-  async function sendDailyCoupon(userTelegramId) {
+  // --- Récupérer le premier message ---
+  async function getFirstMessage(username) {
+    const { rows } = await pool.query(
+      "SELECT * FROM manual_messages ORDER BY type_id ASC LIMIT 1"
+    );
+    if (rows.length === 0) return null;
+
+    // Remplace le @username dans le message
+    let message = rows[0].message_text.replace(/@username/g, `@${username}`);
+    return { type_id: rows[0].type_id, message };
+  }
+
+  // --- Envoi du média daily_pronos (SANS TEXTE) ---
+  async function sendDailyProno(userTelegramId) {
     try {
       const today = new Date().toISOString().slice(0, 10);
-
       const { rows } = await pool.query(
-        `SELECT content, media_type, media_url 
-         FROM daily_pronos 
-         WHERE date_only = $1 AND type = 'gratuit' 
-         LIMIT 1`,
+        `SELECT media_type, media_url FROM daily_pronos 
+         WHERE date_only = $1 AND type = 'gratuit' LIMIT 1`,
         [today]
       );
+      if (rows.length === 0) return;
 
-      if (rows.length === 0) {
-        return bot.sendMessage(
-          userTelegramId,
-          "⚠️ Aucun pronostic disponible pour le moment.",
-          { parse_mode: "HTML" }
-        );
-      }
+      const { media_type, media_url } = rows[0];
 
-      const { content, media_type, media_url } = rows[0];
-
-      // 1️⃣ Envoi du média si présent
       if (media_url && media_type) {
         switch (media_type) {
           case "photo": await bot.sendPhoto(userTelegramId, media_url); break;
@@ -45,35 +46,52 @@ module.exports = function autoValidate(bot, pool) {
         }
       }
 
-      // 2️⃣ Envoi du texte en HTML avec citation
-      if (content) {
-        const messageHtml = `<b>🎯 Pronostic du jour</b>\n<blockquote>${escapeHtml(content)}</blockquote>`;
-        await bot.sendMessage(userTelegramId, messageHtml, { parse_mode: "HTML" });
-      }
     } catch (err) {
-      console.error("❌ Erreur envoi coupon :", err);
+      console.error("Erreur envoi daily_prono :", err);
     }
   }
 
-  // --- Fonction d'auto-validation d'un utilisateur ---
+  // --- Envoi du premier message manuel ---
+  async function sendFirstManualMessage(userTelegramId, username) {
+    try {
+      const { rows: sentRows } = await pool.query(
+        "SELECT 1 FROM sent_messages_log WHERE telegram_id=$1 AND date_sent=CURRENT_DATE",
+        [userTelegramId]
+      );
+      if (sentRows.length > 0) return;
+
+      const messageData = await getFirstMessage(username);
+      if (!messageData) return;
+
+      await bot.sendMessage(userTelegramId, messageData.message, { parse_mode: "HTML" });
+
+      await pool.query(
+        "INSERT INTO sent_messages_log (telegram_id, message_id) VALUES ($1, $2)",
+        [userTelegramId, messageData.type_id]
+      );
+
+    } catch (err) {
+      console.error("Erreur envoi message manuel :", err);
+    }
+  }
+
+  // --- Auto-validation uniquement pour AUTO_USER_ID ---
   async function autoValidateUser() {
     try {
       const { rows } = await pool.query(
-        "SELECT * FROM pending_verifications WHERE telegram_id = $1",
+        "SELECT * FROM pending_verifications WHERE telegram_id=$1",
         [AUTO_USER_ID]
       );
-
       if (rows.length === 0) return;
 
       const user = rows[0];
 
-      // Vérifie si déjà validé
-      const { rows: checkUser } = await pool.query(
-        "SELECT 1 FROM verified_users WHERE telegram_id = $1",
+      const checkUser = await pool.query(
+        "SELECT 1 FROM verified_users WHERE telegram_id=$1",
         [AUTO_USER_ID]
       );
 
-      if (checkUser.length === 0) {
+      if (checkUser.rows.length === 0) {
         await pool.query(
           `INSERT INTO verified_users 
            (telegram_id, username, bookmaker, deposit_id, amount, referrer_id, validated_at)
@@ -81,30 +99,23 @@ module.exports = function autoValidate(bot, pool) {
           [user.telegram_id, user.username, user.bookmaker, user.deposit_id, user.amount, user.referrer_id || null]
         );
 
-        // ⚡ Récompense parrain si présent
         if (user.referrer_id) {
           await pool.query(
-            "UPDATE verified_users SET points = points + 5 WHERE telegram_id = $1",
+            "UPDATE verified_users SET points = points + 5 WHERE telegram_id=$1",
             [user.referrer_id]
           );
-          await bot.sendMessage(
-            user.referrer_id,
-            `🎉 Ton filleul @${user.username} vient d’être validé ! Tu gagnes <b>+5 points</b>.`,
-            { parse_mode: "HTML" }
-          );
+          await bot.sendMessage(user.referrer_id, `🎉 Ton filleul @${user.username} a été validé ! +5 points.`);
         }
       }
 
-      // Supprime de la table pending
       await pool.query(
-        "DELETE FROM pending_verifications WHERE telegram_id = $1",
+        "DELETE FROM pending_verifications WHERE telegram_id=$1",
         [AUTO_USER_ID]
       );
 
-      // Envoi automatique du coupon
-      await sendDailyCoupon(AUTO_USER_ID);
-
-      // Menu principal
+      // --- Envoi des contenus ---
+      await sendDailyProno(AUTO_USER_ID); // ✅ Seulement le média
+      await sendFirstManualMessage(AUTO_USER_ID, user.username);
       await bot.sendMessage(AUTO_USER_ID, "📋 Menu principal :", {
         reply_markup: {
           keyboard: [
@@ -116,12 +127,9 @@ module.exports = function autoValidate(bot, pool) {
         }
       });
 
-      console.log(`✅ Auto-validation réussie pour ${AUTO_USER_ID} et coupon envoyé.`);
+      console.log(`✅ Auto-validation et envoi pour @${user.username}`);
+
     } catch (err) {
-      console.error("❌ Erreur auto-validation :", err);
+      console.error("Erreur auto-validation :", err);
     }
   }
-
-  // Vérifie toutes les X secondes
-  setInterval(autoValidateUser, CHECK_INTERVAL);
-};
