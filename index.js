@@ -438,12 +438,12 @@ await pool.query(
 );
         delete userStates[chatId];
 
-        const sentMessage = await bot.sendMessage(chatId, "⌛ Chargement.", {
+        const sentMessage = await bot.sendMessage(chatId, "⌛ Vérification.", {
           parse_mode: "Markdown",
         });
 
         setTimeout(() => {
-          bot.editMessageText("⌛ Chargement..", {
+          bot.editMessageText("⌛ Vérification..", {
             chat_id: chatId,
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
@@ -451,7 +451,7 @@ await pool.query(
         }, 1000);
 
         setTimeout(() => {
-          bot.editMessageText("⌛ Chargement...", {
+          bot.editMessageText("⌛ Vérification...", {
             chat_id: chatId,
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
@@ -459,7 +459,7 @@ await pool.query(
         }, 2000);
 
         setTimeout(() => {
-          bot.editMessageText("⌛ Chargement.", {
+          bot.editMessageText("⌛ Vérification.", {
             chat_id: chatId,
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
@@ -467,7 +467,7 @@ await pool.query(
         }, 3000);
 
         setTimeout(() => {
-          bot.editMessageText("⌛ Chargement..", {
+          bot.editMessageText("⌛ Vérification..", {
             chat_id: chatId,
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
@@ -475,7 +475,7 @@ await pool.query(
         }, 4000);
 
         setTimeout(() => {
-          bot.editMessageText("⌛ Chargement...", {
+          bot.editMessageText("⌛ Vérification...", {
             chat_id: chatId,
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
@@ -483,7 +483,7 @@ await pool.query(
         }, 5000);
 
         setTimeout(() => {
-          bot.editMessageText("⌛ Chargement.", {
+          bot.editMessageText("⌛ Vérification.", {
             chat_id: chatId,
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
@@ -491,7 +491,7 @@ await pool.query(
         }, 6000);
 
         setTimeout(() => {
-          bot.editMessageText("⌛ Chargement..", {
+          bot.editMessageText("⌛ Vérification..", {
             chat_id: chatId,
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
@@ -499,7 +499,7 @@ await pool.query(
         }, 7000);
 
          setTimeout(() => {
-          bot.editMessageText("⌛ Chargement...", {
+          bot.editMessageText("⌛ Vérification...", {
             chat_id: chatId,
             message_id: sentMessage.message_id,
             parse_mode: "Markdown",
@@ -533,7 +533,7 @@ await pool.query(
         }, 11000);
 
         setTimeout(() => {
-          bot.sendMessage(chatId, "*🤖 Merci, ta demande est en attente de validation 🔎.*\n\n*🕒 Tu seras notifié une fois validé.*", {
+          bot.sendMessage(chatId, "*🤖 Merci, ta demande est en attente de validation .*\n\n*Tu seras notifié une fois validé.*", {
             parse_mode: "Markdown",
           });
         }, 12000);
@@ -696,7 +696,14 @@ bot.on("callback_query", async (query) => {
   }
 
 
-
+// =================== HELPER ESCAPE ===================
+function escapeHtml(text = "") {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+  
    // ------------------ REJET ------------------
   if (data.startsWith("reject_")) {
     const telegramId = data.split("_")[1];
