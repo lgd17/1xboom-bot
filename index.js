@@ -589,7 +589,6 @@ bot.onText(/\/admin/, async (msg) => {
 bot.on("callback_query", async (query) => {
   const chatId = query.message.chat.id;
   const adminId = query.from.id;
-  const messageId = query.message.message_id;
   const data = query.data;
 
   if (!ADMIN_IDS.includes(adminId)) return;
@@ -599,41 +598,59 @@ bot.on("callback_query", async (query) => {
     const telegramId = data.split("_")[1];
 
     try {
-      const { rows } = await pool.query("SELECT * FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
+      const { rows } = await pool.query(
+        "SELECT * FROM pending_verifications WHERE telegram_id = $1",
+        [telegramId]
+      );
       if (rows.length === 0) return;
 
       const user = rows[0];
 
       // Vérifie si déjà validé
-      const checkUser = await pool.query("SELECT 1 FROM verified_users WHERE telegram_id = $1", [user.telegram_id]);
+      const checkUser = await pool.query(
+        "SELECT 1 FROM verified_users WHERE telegram_id = $1",
+        [user.telegram_id]
+      );
       if (checkUser.rows.length === 0) {
         await pool.query(
           `INSERT INTO verified_users (telegram_id, username, bookmaker, deposit_id, amount, referrer_id)
            VALUES ($1,$2,$3,$4,$5,$6)`,
-          [user.telegram_id, user.username, user.bookmaker, user.deposit_id, user.amount, user.referrer_id || null]
+          [
+            user.telegram_id,
+            user.username,
+            user.bookmaker,
+            user.deposit_id,
+            user.amount,
+            user.referrer_id || null,
+          ]
         );
 
-        // ⚡ Si parrain présent, ajoute points
+        // ⚡ Si parrain présent → ajoute points
         if (user.referrer_id) {
-          await pool.query("UPDATE verified_users SET points = points + 5 WHERE telegram_id = $1", [user.referrer_id]);
-          await bot.sendMessage(user.referrer_id, `🎉 Ton filleul @${user.username} vient d’être validé ! Tu gagnes +5 points.`);
+          await pool.query(
+            "UPDATE verified_users SET points = points + 5 WHERE telegram_id = $1",
+            [user.referrer_id]
+          );
+          await bot.sendMessage(
+            user.referrer_id,
+            `🎉 Ton filleul @${user.username} vient d’être validé ! Tu gagnes +5 points.`
+          );
         }
       }
 
       // Supprime la demande en attente
       await pool.query("DELETE FROM pending_verifications WHERE telegram_id = $1", [telegramId]);
 
-      // --- Envoi du pronostic du jour ---
+      // --- Envoi du média du prono du jour ---
       const today = new Date().toISOString().slice(0, 10);
       const { rows: pronoRows } = await pool.query(
-        `SELECT * FROM daily_pronos WHERE date_only = $1 AND type = 'gratuit' LIMIT 1`,
+        `SELECT media_type, media_url FROM daily_pronos 
+         WHERE date_only = $1 AND type = 'gratuit' LIMIT 1`,
         [today]
       );
 
       if (pronoRows.length > 0) {
         const prono = pronoRows[0];
-
-        // Envoi du média si disponible
         if (prono.media_url && prono.media_type) {
           switch (prono.media_type) {
             case "photo": await bot.sendPhoto(user.telegram_id, prono.media_url); break;
@@ -643,14 +660,18 @@ bot.on("callback_query", async (query) => {
             case "video_note": await bot.sendVideoNote(user.telegram_id, prono.media_url); break;
           }
         }
+      }
 
-        // Envoi du texte avec HTML et citation
-        if (prono.content) {
-          const messageHtml = `<b>🎯 Pronostic du jour</b>\n<blockquote>${escapeHtml(prono.content)}</blockquote>`;
-          await bot.sendMessage(user.telegram_id, messageHtml, { parse_mode: "HTML" });
-        }
-      } else {
-        await bot.sendMessage(user.telegram_id, "⚠️ Aucun pronostic disponible pour le moment.", { parse_mode: "HTML" });
+      // --- Message personnalisé aléatoire ---
+      const { rows: manualRows } = await pool.query(
+        "SELECT * FROM manual_messages ORDER BY RANDOM() LIMIT 1"
+      );
+      if (manualRows.length > 0) {
+        const messageText = manualRows[0].message_text.replace(
+          /@username/g,
+          `@${user.username}`
+        );
+        await bot.sendMessage(user.telegram_id, messageText, { parse_mode: "HTML" });
       }
 
       // --- Menu principal ---
@@ -658,18 +679,23 @@ bot.on("callback_query", async (query) => {
         reply_markup: {
           keyboard: [
             ["🏆 Mes Points"],
-            ["🤝 Parrainage", "🆘 Assistance 🤖"]
+            ["🤝 Parrainage", "🆘 Assistance 🤖"],
           ],
           resize_keyboard: true,
-          one_time_keyboard: false
-        }
+          one_time_keyboard: false,
+        },
       });
 
-      await bot.sendMessage(chatId, `✅ Validation de @${user.username} confirmée et menu principal envoyé.`);
+      await bot.sendMessage(
+        chatId,
+        `✅ Validation de @${user.username} confirmée et menu principal envoyé.`
+      );
     } catch (err) {
       console.error("Erreur validation:", err);
     }
   }
+
+
 
    // ------------------ REJET ------------------
   if (data.startsWith("reject_")) {
