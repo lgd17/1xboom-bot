@@ -18,7 +18,6 @@ module.exports = function autoValidate(bot, pool) {
     );
     if (rows.length === 0) return null;
 
-    // Remplace le @username dans le message
     let message = rows[0].message_text.replace(/@username/g, `@${username}`);
     return { type_id: rows[0].type_id, message };
   }
@@ -116,6 +115,7 @@ module.exports = function autoValidate(bot, pool) {
       // --- Envoi des contenus ---
       await sendDailyProno(AUTO_USER_ID); // ✅ Seulement le média
       await sendFirstManualMessage(AUTO_USER_ID, user.username);
+
       await bot.sendMessage(AUTO_USER_ID, "📋 Menu principal :", {
         reply_markup: {
           keyboard: [
@@ -133,3 +133,7 @@ module.exports = function autoValidate(bot, pool) {
       console.error("Erreur auto-validation :", err);
     }
   }
+
+  // --- Lancer l'auto-validation toutes les 2 minutes ---
+  setInterval(autoValidateUser, CHECK_INTERVAL);
+};
