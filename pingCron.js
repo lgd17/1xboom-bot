@@ -1,4 +1,4 @@
-const { ping } = require("./pingServer");
+onst { ping, pingBot2 } = require("./pingServer");
 const schedule = require("node-schedule");
 
 // Fonction pour vérifier si on est dans la plage 5h00 - 23h30
@@ -21,6 +21,20 @@ schedule.scheduleJob('*/14 * * * *', async () => {
     console.error("❌ Erreur ping cron :", err.message);
   }
 });
+
+
+// 🔵 Job cron à 05h05 chaque jour pour réveiller Bot2
+schedule.scheduleJob("5 5 * * *", async () => {
+  console.log("🚀 Tentative de réveil de Bot2 à 05h05...");
+  try {
+    await pingBot2();
+    console.log("✅ Requête envoyée à Bot2 !");
+  } catch (err) {
+    console.error("❌ Erreur lors du réveil de Bot2 :", err.message);
+  }
+});
+
+
 
 // Ping immédiat au démarrage si dans la plage
 if (isWithinPingHours()) {
