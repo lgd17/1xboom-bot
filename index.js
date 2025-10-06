@@ -22,7 +22,14 @@ const { formatMatchTips } = require("./couponUtils");
 const { t } = require("./lang");
 const autoValidate = require("./autoValidate");
 const { registerWakeBot2Command } = require("./wakeBot2Command");
-// Enregistre la commande sur ton bot
+
+// ⚠️ Définir ADMIN_ID avant de l’utiliser
+const ADMIN_ID = process.env.ADMIN_ID;
+if (!ADMIN_ID) {
+  throw new Error("❌ ADMIN_ID non défini dans .env");
+}
+
+// Enregistre la commande /wakebot2
 registerWakeBot2Command(bot, ADMIN_ID);
 // Après avoir défini `bot` et `pool`
 autoValidate(bot, pool);
