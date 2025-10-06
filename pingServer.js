@@ -1,8 +1,11 @@
+
 const fetch = require("node-fetch");
+const axios = require("axios");
 const bot = require("./bot");
 const ADMIN_ID = process.env.ADMIN_ID;
 
 const URL = process.env.PING_URL || "https://onexboom-bot.onrender.com/ping";
+const BOT2_URL = process.env.BOT2_URL || "https://onexadmin-bot.onrender.com/ping";
 
 async function ping() {
   try {
@@ -21,5 +24,25 @@ async function ping() {
   }
 }
 
-// Exporter la fonction pour index.js
-module.exports = { ping };
+
+// 2️⃣ Ping Bot2 (pour le réveiller)
+
+// 🔵 Fonction spéciale : réveiller Bot2
+async function pingBot2() {
+  try {
+    await axios.get(BOT2_URL);
+    console.log("✅ Bot2 réveillé !");
+  } catch {
+    console.warn("⚠️ 1ère tentative échouée, nouvel essai dans 30s...");
+    setTimeout(async () => {
+      try {
+        await axios.get(BOT2_URL);
+        console.log("✅ Bot2 réveillé au 2ᵉ essai !");
+      } catch (err) {
+        console.error("❌ Impossible de réveiller Bot2 même après 2 tentatives :", err.message);
+      }
+    }, 30000);
+  }
+}
+
+module.exports = { ping, pingBot2 };
