@@ -21,7 +21,9 @@ const generateCouponAsia = require("./generateCouponAsia");
 const { formatMatchTips } = require("./couponUtils");
 const { t } = require("./lang");
 const autoValidate = require("./autoValidate");
-
+const { registerWakeBot2Command } = require("./wakeBot2Command");
+// Enregistre la commande sur ton bot
+registerWakeBot2Command(bot, ADMIN_ID);
 // Après avoir défini `bot` et `pool`
 autoValidate(bot, pool);
 
