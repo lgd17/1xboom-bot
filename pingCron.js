@@ -1,4 +1,4 @@
-onst { ping, pingBot2 } = require("./pingServer");
+const { ping, pingBot2 } = require("./pingServer");
 const schedule = require("node-schedule");
 
 // Fonction pour vérifier si on est dans la plage 5h00 - 23h30
