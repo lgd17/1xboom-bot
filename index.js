@@ -12,7 +12,7 @@ const { pool, insertManualCoupon } = require("./db");
 const { checkSpam } = require("./spamUtils");
 require("./pingCron");
 const { sendManualCoupon, generateAndSendCoupon, cleanOldData } = require("./autoSend");
-const { ping } = require("./pingServer")
+const { ping, pingBot2 } = require("./pingServer");
 require("./autoCoupons"); // conserve l’exécution automatique existante
 const generateCouponEurope = require("./generateCouponEurope");
 const generateCouponAfrica = require("./generateCouponAfrica");
