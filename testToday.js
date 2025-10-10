@@ -1,50 +1,47 @@
-// testToday.js
+// test_today.js
 const { pool } = require("./db");
 const bot = require("./bot");
-const { sendManualCoupon } = require("./autoSend");
 const moment = require("moment-timezone");
 
-// ===============================
-// COMMANDE /test_today
-// ===============================
-module.exports = () => {
+module.exports = (bot) => {
   bot.onText(/\/test_today/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
 
-    // ✅ Autorisation : admin seulement
-    if (userId.toString() !== process.env.ADMIN_ID) return;
-
     try {
+      // Vérifier connexion bot / serveur
+      await bot.sendMessage(chatId, "Bot et serveur ✅ fonctionnels");
+
+      // Récupérer le coupon du jour (basé sur la date_only)
       const today = moment().tz("Africa/Lome").format("YYYY-MM-DD");
-      const { rows } = await pool.query(
-        `SELECT id, content, media_url, media_type, date_only, type 
-         FROM daily_pronos 
-         WHERE date_only = CURRENT_DATE 
-         ORDER BY id DESC LIMIT 1`
+      const result = await pool.query(
+        "SELECT * FROM daily_pronos WHERE date_only = $1 LIMIT 1",
+        [today]
       );
 
-      if (rows.length === 0) {
-        await bot.sendMessage(chatId, `⚠️ Aucun coupon trouvé pour aujourd'hui (${today}).`);
-        return;
+      if (result.rows.length === 0) {
+        return bot.sendMessage(
+          chatId,
+          `⚠️ Aucun coupon trouvé pour aujourd'hui (${today}).`
+        );
       }
 
-      const coupon = rows[0];
-      const dateStr = moment(coupon.date_only).tz("Africa/Lome").format("DD/MM/YYYY");
+      const coupon = result.rows[0];
+      const caption = coupon.content || "Coupon sans texte.";
 
-      // ✅ Envoi d’un aperçu du coupon
-      await bot.sendMessage(chatId,
-        `✅ Coupon trouvé pour *${dateStr}*\nType : *${coupon.type}*\nID : ${coupon.id}`,
-        { parse_mode: "Markdown" }
-      );
+      // Envoi selon le type de média
+      if (coupon.media_type === "photo" && coupon.media_url) {
+        await bot.sendPhoto(chatId, coupon.media_url, { caption });
+      } else if (coupon.media_type === "video" && coupon.media_url) {
+        await bot.sendVideo(chatId, coupon.media_url, { caption });
+      } else {
+        await bot.sendMessage(chatId, caption);
+      }
 
-      // ✅ Envoi du coupon réel (même logique que autoSend)
-      await sendManualCoupon();
-
-      await bot.sendMessage(chatId, `🚀 Test terminé : coupon du jour envoyé !`);
+      console.log(`✅ Coupon envoyé à ${userId} (${today})`);
     } catch (err) {
-      console.error("❌ Erreur /test_today :", err);
-      await bot.sendMessage(chatId, "❌ Erreur lors du test du coupon du jour : " + err.message);
+      console.error("❌ Erreur test_today:", err);
+      await bot.sendMessage(chatId, "❌ Erreur interne lors du test_today.");
     }
   });
 };
