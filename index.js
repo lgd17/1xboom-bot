@@ -21,7 +21,7 @@ const generateCouponAsia = require("./generateCouponAsia");
 const { formatMatchTips } = require("./couponUtils");
 const { t } = require("./lang");
 const autoValidate = require("./autoValidate");
-require("./commands/test_today")(bot);
+require("./test_today")(bot);
 
 
 
