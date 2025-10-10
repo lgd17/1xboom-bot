@@ -2,6 +2,7 @@ const { pool } = require("./db");
 const bot = require("./bot");
 const ADMIN_ID = process.env.ADMIN_ID;
 
+
 module.exports = () => {
   bot.onText(/\/test_caption/, async (msg) => {
     if (msg.from.id.toString() !== ADMIN_ID) return;
@@ -9,6 +10,9 @@ module.exports = () => {
     const chatId = msg.chat.id;
 
     try {
+      // 🟢 Message immédiat de statut
+      await bot.sendMessage(chatId, "🟢 Bot et serveur ✅ fonctionnels\n\n🔍 Récupération du dernier prono dans `daily_pronos`...");
+
       // === 1️⃣ Récupérer le dernier prono du jour ===
       const { rows } = await pool.query(`
         SELECT content, media_url, media_type, created_at 
@@ -24,7 +28,7 @@ module.exports = () => {
       }
 
       const prono = rows[0];
-      const caption = `🧪 *TEST CAPTION AUTO*\n\n${prono.content || ""}`;
+      const caption = `🧪 *TEST CAPTION AUTO*\n\n${prono.content || "(aucun texte)"}\n\n🗓️ ${new Date(prono.created_at).toLocaleString()}`;
 
       // Limite Telegram : 1024 caractères
       const safeCaption = caption.length > 1000 ? caption.slice(0, 1000) + "…" : caption;
@@ -45,7 +49,7 @@ module.exports = () => {
           break;
       }
 
-      // === 3️⃣ Confirmation de succès ===
+      // === 3️⃣ Message final ===
       await bot.sendMessage(
         chatId,
         "✅ Test terminé — légende récupérée depuis `daily_pronos`.\nAucune erreur = protection active 💪"
