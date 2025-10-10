@@ -21,6 +21,8 @@ const generateCouponAsia = require("./generateCouponAsia");
 const { formatMatchTips } = require("./couponUtils");
 const { t } = require("./lang");
 const autoValidate = require("./autoValidate");
+require("./testCaption")();
+
 
 // Après avoir défini `bot` et `pool`
 autoValidate(bot, pool);
