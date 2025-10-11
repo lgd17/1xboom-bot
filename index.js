@@ -2684,6 +2684,193 @@ const editSessions = {};
 
 
 
+// --- Commande /voir_pronos ---
+bot.onText(/\/ajouter_prono/, (msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+
+  if (!ADMIN_IDS.includes(userId))
+    return bot.sendMessage(chatId, "🚫 Commande réservée à l’admin.");
+
+  pendingCoupon[chatId] = {
+    step: "awaiting_date",
+    date: null,
+    content: null,
+    type: "gratuit", // par défaut
+    mediaUrl: null,
+    mediaType: null,
+  };
+
+  bot.sendMessage(
+    chatId,
+    "📅 Envoie la date du prono (format : YYYY-MM-DD) ou tape /today pour aujourd’hui."
+  );
+});
+
+// --- /today ---
+bot.onText(/\/today/, (msg) => {
+  const chatId = msg.chat.id;
+  const state = pendingCoupon[chatId];
+  if (!state || state.step !== "awaiting_date") return;
+
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  state.date = today.toISOString().slice(0, 10); // YYYY-MM-DD
+  state.step = "awaiting_content";
+
+  bot.sendMessage(chatId, "📝 Envoie maintenant le texte du prono.");
+});
+
+// --- Gestion des messages ---
+bot.on("message", async (msg) => {
+  const chatId = msg.chat.id;
+  const state = pendingCoupon[chatId];
+  if (!state || msg.text?.startsWith("/")) return;
+
+  // --- Étape 1 : Date ---
+  if (state.step === "awaiting_date") {
+    const inputDate = msg.text?.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(inputDate)) {
+      return bot.sendMessage(chatId, "⚠️ Format invalide. Utilise YYYY-MM-DD.");
+    }
+
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    if (new Date(inputDate) < today) {
+      return bot.sendMessage(chatId, "❌ La date ne peut pas être dans le passé.");
+    }
+
+    state.date = inputDate;
+    state.step = "awaiting_content";
+    return bot.sendMessage(chatId, "📝 Envoie maintenant le texte du prono.");
+  }
+
+  // --- Étape 2 : Contenu ---
+  if (state.step === "awaiting_content") {
+    if (!msg.text || msg.text.trim().length < 5) {
+      return bot.sendMessage(chatId, "⚠️ Le texte du prono est trop court.");
+    }
+
+    state.content = msg.text.trim();
+    state.step = "awaiting_type";
+
+    // --- Choix du type de prono ---
+    return bot.sendMessage(chatId, "🎯 Choisis le type de prono :", {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Gratuit", callback_data: "type_gratuit" }],
+          [{ text: "Premium", callback_data: "type_premium" }]
+        ]
+      }
+    });
+  }
+
+  // --- Étape 3 : Média ---
+  if (state.step === "awaiting_media") {
+    let fileId = null;
+    let mediaType = null;
+
+    if (msg.photo) {
+      fileId = msg.photo.at(-1).file_id;
+      mediaType = "photo";
+    } else if (msg.video) {
+      fileId = msg.video.file_id;
+      mediaType = "video";
+    } else if (msg.document) {
+      fileId = msg.document.file_id;
+      mediaType = "document";
+    } else if (msg.voice) {
+      fileId = msg.voice.file_id;
+      mediaType = "voice";
+    } else if (msg.audio) {
+      fileId = msg.audio.file_id;
+      mediaType = "audio";
+    } else if (msg.video_note) {
+      fileId = msg.video_note.file_id;
+      mediaType = "video_note";
+    } else if (msg.text === "/skip") {
+      fileId = null;
+      mediaType = null;
+    } else {
+      return bot.sendMessage(
+        chatId,
+        "⚠️ Envoie un média valide ou tape /skip."
+      );
+    }
+
+    state.mediaUrl = fileId;
+    state.mediaType = mediaType;
+    state.step = "confirming";
+
+    // --- Récapitulatif ---
+    const recap = `📝 <b>Récapitulatif du prono :</b>
+📅 Date : <b>${state.date}</b>
+✍️ Contenu : <i>${state.content}</i>
+📎 Média : ${mediaType ? mediaType : "aucun"}
+📌 Type : <b>${state.type}</b>
+`;
+
+    return bot.sendMessage(chatId, recap, {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Confirmer", callback_data: "confirm_prono" },
+            { text: "❌ Annuler", callback_data: "cancel_prono" }
+          ]
+        ]
+      }
+    });
+  }
+});
+
+// --- Gestion des boutons inline ---
+bot.on("callback_query", async (query) => {
+  const chatId = query.message.chat.id;
+  const state = pendingCoupon[chatId];
+  if (!state) return bot.answerCallbackQuery(query.id);
+
+  // --- Choix du type ---
+  if (state.step === "awaiting_type") {
+    if (query.data === "type_gratuit") state.type = "gratuit";
+    if (query.data === "type_premium") state.type = "premium";
+
+    state.step = "awaiting_media";
+    await bot.sendMessage(chatId, "📎 Envoie maintenant le média pour ce prono ou tape /skip.");
+  }
+
+  // --- Confirmation finale ---
+  if (state.step === "confirming") {
+    if (query.data === "confirm_prono") {
+      const result = await insertManualCoupon(
+        state.content,
+        state.mediaUrl,
+        state.mediaType,
+        state.date,
+        state.type
+      );
+
+      if (result.success) {
+        await bot.sendMessage(
+          chatId,
+          `✅ Coupon <b>${state.type.toUpperCase()}</b> ajouté pour le ${state.date}`,
+          { parse_mode: "HTML" }
+        );
+      } else {
+        await bot.sendMessage(chatId, "❌ Erreur lors de l’insertion du prono : " + result.error.message);
+      }
+
+      delete pendingCoupon[chatId];
+    }
+
+    if (query.data === "cancel_prono") {
+      delete pendingCoupon[chatId];
+      await bot.sendMessage(chatId, "❌ Ajout annulé.");
+    }
+  }
+
+  await bot.answerCallbackQuery(query.id);
+});
 
 
 
