@@ -16,9 +16,22 @@ const BOT_LINK = process.env.BOT_LINK || "https://t.me/Official_1XBOOM_bot";
 // Helper: sleep
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-// Helper: échappe le texte pour parse_mode HTML
+// Helper: échappe le texte pour parse_mode HTML et corrige balises mal fermées
 function escapeHtml(text = "") {
-  return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  let t = String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // simple fermeture automatique pour <b> et <i>
+  const tags = ["b", "i"];
+  tags.forEach(tag => {
+    const open = (t.match(new RegExp(`&lt;${tag}&gt;`, "g")) || []).length;
+    const close = (t.match(new RegExp(`&lt;/${tag}&gt;`, "g")) || []).length;
+    const diff = open - close;
+    if (diff > 0) t += "&lt;/" + tag + "&gt;".repeat(diff);
+  });
+  return t;
 }
 
 // ==========================
@@ -39,15 +52,14 @@ async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
 
         // --- Envoi texte pur ---
         if (typeof message === "string") {
-          await bot.sendMessage(chatId, `Salut ${name} 👋\n\n${message}`, { parse_mode: "HTML" });
+          await bot.sendMessage(chatId, `Salut <b>${escapeHtml(name)}</b> 👋\n\n${message}`, { parse_mode: "HTML" });
         } 
         // --- Envoi média ou message structuré ---
         else {
-          let caption = message.caption
-            ? `Salut ${name} 👋\n\n${escapeHtml(message.caption)}`
-            : `Salut ${name} 👋`;
+          const caption = message.caption
+            ? `Salut <b>${escapeHtml(name)}</b> 👋\n\n${escapeHtml(message.caption)}`
+            : `Salut <b>${escapeHtml(name)}</b> 👋`;
 
-          // Sécurité : Telegram limite les captions à 1024 caractères
           const safeCaption = caption.length > 1000 ? caption.slice(0, 1000) + "…" : caption;
 
           switch (message.type) {
@@ -74,13 +86,7 @@ async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
               await bot.sendMessage(chatId, `${safeCaption ? safeCaption + "\n\n" : ""}🔗 ${message.media}`, { parse_mode: "HTML" });
               break;
             default:
-              await bot.sendMessage(
-                chatId,
-                message.caption
-                  ? `Salut ${name} 👋\n\n${escapeHtml(message.caption)}`
-                  : `Salut ${name} 👋\n\n${String(message.media || "")}`,
-                { parse_mode: "HTML" }
-              );
+              await bot.sendMessage(chatId, safeCaption, { parse_mode: "HTML" });
           }
         }
         success++;
@@ -88,7 +94,6 @@ async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
         console.error(`⚠️ Erreur envoi à ${u.telegram_id}:`, err?.message || err);
         fail++;
 
-        // Enregistrer l’échec dans la DB
         try {
           await pool.query(
             `INSERT INTO failed_sends (telegram_id, message_type, reason) VALUES ($1, $2, $3)`,
@@ -107,52 +112,90 @@ async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
 }
 
 // ==========================
-// Relance des envois échoués
-// ==========================
-async function retryFailedSends(batchSize = 30, delayMs = 2000) {
-  const { rows: failed } = await pool.query(`SELECT * FROM failed_sends WHERE date_sent = CURRENT_DATE`);
-  if (failed.length === 0) return console.log("✅ Aucun échec à relancer aujourd'hui");
-
-  console.log(`🔁 Relance de ${failed.length} envois échoués`);
-  const users = failed.map(f => ({ telegram_id: f.telegram_id }));
-  const report = await sendToUsers(users, "📨 Relance du coupon du jour !", batchSize, delayMs);
-  console.log(`✅ Relance terminée : ${report.success} réussis, ${report.fail} échecs`);
-
-  await pool.query(`DELETE FROM failed_sends WHERE date_sent = CURRENT_DATE`);
-}
-
-// ==========================
-// Envoi manuel
+// Envoi manuel corrigé
 // ==========================
 async function sendManualCoupon() {
   try {
-    const { rows } = await pool.query(`SELECT * FROM daily_pronos WHERE date_only = CURRENT_DATE AND type = 'gratuit' LIMIT 1`);
+    const { rows } = await pool.query(`
+      SELECT * FROM daily_pronos 
+      WHERE date_only = CURRENT_DATE AND type = 'gratuit' 
+      LIMIT 1
+    `);
     if (rows.length === 0) return console.log("⚠️ Aucun coupon manuel trouvé");
 
     const coupon = rows[0];
-    let message;
 
-    if (coupon.media_url && coupon.media_type) {
-      const caption = coupon.content
-        ? `🎯 <b>COUPON DU JOUR</b>\n\n${escapeHtml(coupon.content)}`
-        : "🎯 <b>COUPON DU JOUR</b>";
-      message = { type: coupon.media_type, media: coupon.media_url, caption };
-    } else {
-      const matches = coupon.matches ? JSON.parse(coupon.matches) : [];
-      message = `🎯 <b>COUPON DU JOUR</b> 🎯\n\n${escapeHtml(coupon.content || formatMatchTips(matches))}`;
-    }
+    const { rows: users } = await pool.query("SELECT telegram_id, first_name, username FROM verified_users");
+    if (!users.length) return console.log("⚠️ Aucun utilisateur trouvé pour l’envoi");
 
-    const { rows: users } = await pool.query("SELECT telegram_id FROM verified_users");
-    const report = await sendToUsers(users, message);
+    let success = 0;
+    let fail = 0;
 
-    for (let user of users) {
+    for (const u of users) {
+      const chatId = u.telegram_id;
+      const name = u.first_name || (u.username ? `@${u.username}` : "ami");
+
       try {
-        await pool.query(`
-          INSERT INTO daily_access (telegram_id, date, clicked)
-          VALUES ($1, CURRENT_DATE, true)
-          ON CONFLICT (telegram_id, date) DO UPDATE SET clicked = true
-        `, [user.telegram_id]);
-      } catch (e) { console.error("Erreur insert daily_access :", e.message || e); }
+        // 1️⃣ Envoi du média
+        if (coupon.media_url && coupon.media_type) {
+          switch (coupon.media_type) {
+            case "photo":
+              await bot.sendPhoto(chatId, coupon.media_url);
+              break;
+            case "video":
+              await bot.sendVideo(chatId, coupon.media_url);
+              break;
+            case "video_note":
+              await bot.sendVideoNote(chatId, coupon.media_url);
+              break;
+            case "voice":
+              await bot.sendVoice(chatId, coupon.media_url);
+              break;
+            case "audio":
+              await bot.sendAudio(chatId, coupon.media_url);
+              break;
+            case "document":
+              await bot.sendDocument(chatId, coupon.media_url);
+              break;
+            default:
+              await bot.sendMessage(chatId, `Salut ${name} 👋\n\nMédia non pris en charge`);
+          }
+        }
+
+        // 2️⃣ Envoi du texte séparé
+        const matches = coupon.matches ? JSON.parse(coupon.matches) : [];
+        const text = coupon.content || formatMatchTips(matches);
+
+        if (text && text.trim() !== "") {
+          await bot.sendMessage(chatId, `Salut ${name} 👋\n\n🎯 COUPON DU JOUR 🎯\n\n${escapeHtml(text)}`, { parse_mode: "HTML" });
+        }
+
+        success++;
+
+        // 3️⃣ Enregistrement dans daily_access
+        try {
+          await pool.query(`
+            INSERT INTO daily_access (telegram_id, date, clicked)
+            VALUES ($1, CURRENT_DATE, true)
+            ON CONFLICT (telegram_id, date) DO UPDATE SET clicked = true
+          `, [chatId]);
+        } catch (e) {
+          console.error("Erreur insert daily_access :", e.message || e);
+        }
+
+      } catch (err) {
+        console.error(`⚠️ Erreur envoi à ${chatId}:`, err?.message || err);
+        fail++;
+
+        try {
+          await pool.query(
+            `INSERT INTO failed_sends (telegram_id, message_type, reason) VALUES ($1, $2, $3)`,
+            [chatId, coupon.media_type || "text", err?.message || "unknown"]
+          );
+        } catch (dbErr) {
+          console.error("Erreur enregistrement échec :", dbErr.message || dbErr);
+        }
+      }
     }
 
     // Notification canal
@@ -163,18 +206,22 @@ async function sendManualCoupon() {
     // Rapport admin
     if (ADMIN_ID) {
       await bot.sendMessage(ADMIN_ID,
-        `✅ <b>Coupon manuel envoyé</b>\n👥 Utilisateurs : <b>${users.length}</b>\n📨 Réussis : <b>${report.success}</b>\n⚠️ Échecs : <b>${report.fail}</b>\n⏱️ Durée : <b>${report.durationSec}s</b>`,
+        `✅ <b>Coupon manuel envoyé</b>\n👥 Utilisateurs : <b>${users.length}</b>\n📨 Réussis : <b>${success}</b>\n⚠️ Échecs : <b>${fail}</b>`,
         { parse_mode: "HTML" }
       );
     }
 
-    console.log("✅ Coupon manuel envoyé");
-    await retryFailedSends(); // relance automatique
+    console.log(`✅ Coupon manuel envoyé : ${success} réussis, ${fail} échecs`);
+
+    // Relance automatique des échecs
+    await retryFailedSends();
+
   } catch (err) {
     console.error("❌ Erreur envoi manuel :", err);
     if (ADMIN_ID) await bot.sendMessage(ADMIN_ID, `❌ Erreur envoi manuel : ${escapeHtml(err.message || String(err))}`, { parse_mode: "HTML" });
   }
 }
+
 
 // ==========================
 // Génération + envoi automatique
