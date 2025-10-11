@@ -34,6 +34,19 @@ function escapeHtml(text = "") {
   return t;
 }
 
+// Déclaration de la fonction
+async function retryFailedSends(batchSize = 30, delayMs = 2000) {
+  const { rows: failed } = await pool.query(`SELECT * FROM failed_sends WHERE date_sent = CURRENT_DATE`);
+  if (!failed.length) return console.log("✅ Aucun échec à relancer aujourd'hui");
+
+  console.log(`🔁 Relance de ${failed.length} envois échoués`);
+  const users = failed.map(f => ({ telegram_id: f.telegram_id }));
+  const report = await sendToUsers(users, "📨 Relance du coupon du jour !", batchSize, delayMs);
+  console.log(`✅ Relance terminée : ${report.success} réussis, ${report.fail} échecs`);
+
+  await pool.query(`DELETE FROM failed_sends WHERE date_sent = CURRENT_DATE`);
+}
+
 // ==========================
 // Envoi aux utilisateurs par batch
 // ==========================
