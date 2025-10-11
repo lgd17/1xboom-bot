@@ -2,7 +2,7 @@ const { pool } = require("./db");
 const bot = require("./bot");
 const moment = require("moment-timezone");
 const ADMIN_ID = process.env.ADMIN_ID; // <--- ajoute ceci
-
+const { sendManualCoupon } = require("./autoSend");
 
 
 module.exports = (bot) => {
