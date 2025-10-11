@@ -11,7 +11,7 @@ const { app, bot } = require("./server");
 const { pool, insertManualCoupon } = require("./db");
 const { checkSpam } = require("./spamUtils");
 require("./pingCron");
-const { sendManualCoupon, generateAndSendCoupon, cleanOldData } = require("./autoSend");
+const { sendManualCoupon, generateAndSendCoupon, cleanOldData, retryFailedSends,  scheduleDailyReminder } = require("./autoSend");
 const { ping, pingBot2 } = require("./pingServer");
 require("./autoCoupons"); // conserve l’exécution automatique existante
 const generateCouponEurope = require("./generateCouponEurope");
