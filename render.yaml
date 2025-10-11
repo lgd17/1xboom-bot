@@ -12,6 +12,8 @@ services:
     envVars:
       - key: BOT_TOKEN
         fromEnvVar: BOT_TOKEN      # valeur configurée dans Render
+      - key: BOT_MAIN_TOKEN
+        fromEnvVar: BOT_MAIN_TOKEN
       - key: SUPABASE_URL
         fromEnvVar: SUPABASE_URL   # valeur configurée dans Render
       - key: SUPABASE_KEY
