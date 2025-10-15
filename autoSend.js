@@ -375,6 +375,15 @@ function scheduleDailyReminder() {
   schedule.scheduleJob("0 16 * * *", sendDailyReminder);
 }
 
+// 🔹 Redémarrage quotidien
+// =====================
+schedule.scheduleJob("0 2 * * *", async () => {
+  console.log("♻️ Redémarrage automatique autoSend...");
+  if (ADMIN_ID) await bot.sendMessage(ADMIN_ID, "♻️ Redémarrage automatique autoSend...");
+  process.exit(0); // 🔹 relance le bot pour éviter les freezes
+});
+
+
 module.exports = {
   sendManualCoupon,
   generateAndSendCoupon,
