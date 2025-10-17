@@ -1,55 +1,76 @@
-// autoSend.js
 const { pool } = require("./db");
+const bot = require("./bot");
 const moment = require("moment-timezone");
+const schedule = require("node-schedule");
+const fetch = require("node-fetch");
+
+// ----- Modules de génération -----
 const generateCouponEurope = require("./generateCouponEurope");
 const generateCouponAfrica = require("./generateCouponAfrica");
 const generateCouponAmerica = require("./generateCouponAmerica");
 const generateCouponAsia = require("./generateCouponAsia");
 const { formatMatchTips } = require("./couponUtils");
-const bot = require("./bot");
-const schedule = require("node-schedule");
 
-const CHANNEL_ID = process.env.CHANNEL_ID;
+// ----- ENV -----
 const ADMIN_ID = process.env.ADMIN_ID;
+const CHANNEL_ID = process.env.CHANNEL_ID;
 const BOT_LINK = process.env.BOT_LINK || "https://t.me/Official_1XBOOM_bot";
+const PING_URL = process.env.PING_URL || "https://onexadmin-bot.onrender.com/ping";
 
-// Helper: sleep
-function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+// ----- Helpers -----
+const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error("⏱ Timeout du ping")), ms));
 
-// Helper: échappe le texte pour parse_mode HTML et corrige balises mal fermées
+// Échapper HTML et fermer balises
 function escapeHtml(text = "") {
   let t = String(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-
-  // simple fermeture automatique pour <b> et <i>
   const tags = ["b", "i"];
   tags.forEach(tag => {
-    const open = (t.match(new RegExp(`&lt;${tag}&gt;`, "g")) || []).length;
-    const close = (t.match(new RegExp(`&lt;/${tag}&gt;`, "g")) || []).length;
-    const diff = open - close;
-    if (diff > 0) t += "&lt;/" + tag + "&gt;".repeat(diff);
+    const o = (t.match(new RegExp(`&lt;${tag}&gt;`, "g")) || []).length;
+    const c = (t.match(new RegExp(`&lt;/${tag}&gt;`, "g")) || []).length;
+    if (o > c) t += `&lt;/${tag}&gt;`.repeat(o - c);
   });
   return t;
 }
 
-// Déclaration de la fonction
+// ======================
+// 🔹 Fonction Ping
+// ======================
+async function pingServer() {
+  try {
+    const res = await Promise.race([fetch(PING_URL), timeout(10000)]);
+    if (res.ok) {
+      console.log(`✅ Ping réussi (${res.status})`);
+    } else {
+      console.warn(`⚠️ Ping échoué (${res.status})`);
+      if (ADMIN_ID) await bot.sendMessage(ADMIN_ID, `⚠️ Ping échoué (${res.status})`);
+    }
+  } catch (err) {
+    console.error("❌ Erreur ping :", err.message);
+    if (ADMIN_ID) await bot.sendMessage(ADMIN_ID, `❌ Erreur ping : ${err.message}`);
+  }
+}
+
+// ======================
+// 🔹 Retry des échecs
+// ======================
 async function retryFailedSends(batchSize = 30, delayMs = 2000) {
-  const { rows: failed } = await pool.query(`SELECT * FROM failed_sends WHERE date_sent = CURRENT_DATE`);
-  if (!failed.length) return console.log("✅ Aucun échec à relancer aujourd'hui");
+  const { rows } = await pool.query(`SELECT * FROM failed_sends WHERE date_sent = CURRENT_DATE`);
+  if (!rows.length) return console.log("✅ Aucun envoi échoué à relancer aujourd’hui");
 
-  console.log(`🔁 Relance de ${failed.length} envois échoués`);
-  const users = failed.map(f => ({ telegram_id: f.telegram_id }));
-  const report = await sendToUsers(users, "📨 Relance du coupon du jour !", batchSize, delayMs);
-  console.log(`✅ Relance terminée : ${report.success} réussis, ${report.fail} échecs`);
-
+  console.log(`🔁 Relance de ${rows.length} envois échoués`);
+  const users = rows.map(f => ({ telegram_id: f.telegram_id }));
+  const { success, fail } = await sendToUsers(users, "📨 Relance du coupon du jour !", batchSize, delayMs);
+  console.log(`✅ Relance terminée (${success} OK / ${fail} erreurs)`);
   await pool.query(`DELETE FROM failed_sends WHERE date_sent = CURRENT_DATE`);
 }
 
-// ==========================
-// Envoi aux utilisateurs par batch
-// ==========================
+// ======================
+// 🔹 Envoi générique
+// ======================
 async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
   let success = 0, fail = 0;
   const start = Date.now();
@@ -57,337 +78,155 @@ async function sendToUsers(users, message, batchSize = 30, delayMs = 2000) {
   for (let i = 0; i < users.length; i += batchSize) {
     const batch = users.slice(i, i + batchSize);
     await Promise.all(batch.map(async u => {
+      const chatId = u.telegram_id;
+      const name = u.first_name || (u.username ? `@${u.username}` : "ami");
       try {
-        const chatId = u.telegram_id || u.telegramId || u.id;
-        if (!chatId) return fail++;
-
-        const name = u.first_name || u.username ? (u.first_name || `@${u.username}`) : "ami";
-
-        // --- Envoi texte pur ---
-        if (typeof message === "string") {
-          await bot.sendMessage(chatId, `Salut <b>${escapeHtml(name)}</b> 👋\n\n${message}`, { parse_mode: "HTML" });
-        } 
-        // --- Envoi média ou message structuré ---
-        else {
-          const caption = message.caption
-            ? `Salut <b>${escapeHtml(name)}</b> 👋\n\n${escapeHtml(message.caption)}`
-            : `Salut <b>${escapeHtml(name)}</b> 👋`;
-
-          const safeCaption = caption.length > 1000 ? caption.slice(0, 1000) + "…" : caption;
-
-          switch (message.type) {
-            case "photo":
-              await bot.sendPhoto(chatId, message.media, { caption: safeCaption, parse_mode: "HTML" });
-              break;
-            case "video":
-              await bot.sendVideo(chatId, message.media, { caption: safeCaption, parse_mode: "HTML" });
-              break;
-            case "video_note":
-              await bot.sendVideoNote(chatId, message.media);
-              if (safeCaption) await bot.sendMessage(chatId, safeCaption, { parse_mode: "HTML" });
-              break;
-            case "voice":
-              await bot.sendVoice(chatId, message.media, { caption: safeCaption, parse_mode: "HTML" });
-              break;
-            case "audio":
-              await bot.sendAudio(chatId, message.media, { caption: safeCaption, parse_mode: "HTML" });
-              break;
-            case "document":
-              await bot.sendDocument(chatId, message.media, { caption: safeCaption, parse_mode: "HTML" });
-              break;
-            case "url":
-              await bot.sendMessage(chatId, `${safeCaption ? safeCaption + "\n\n" : ""}🔗 ${message.media}`, { parse_mode: "HTML" });
-              break;
-            default:
-              await bot.sendMessage(chatId, safeCaption, { parse_mode: "HTML" });
-          }
-        }
+        await bot.sendMessage(chatId, `Salut <b>${escapeHtml(name)}</b> 👋\n\n${escapeHtml(message)}`, { parse_mode: "HTML" });
         success++;
       } catch (err) {
-        console.error(`⚠️ Erreur envoi à ${u.telegram_id}:`, err?.message || err);
         fail++;
-
-        try {
-          await pool.query(
-            `INSERT INTO failed_sends (telegram_id, message_type, reason) VALUES ($1, $2, $3)`,
-            [u.telegram_id, typeof message === "string" ? "text" : message.type, err?.message || "unknown"]
-          );
-        } catch (dbErr) {
-          console.error("Erreur enregistrement échec :", dbErr.message || dbErr);
-        }
+        console.error(`⚠️ Envoi échoué ${chatId} :`, err.message);
+        await pool.query(
+          `INSERT INTO failed_sends (telegram_id, message_type, reason) VALUES ($1,$2,$3)`,
+          [chatId, "text", err.message]
+        );
       }
     }));
     if (i + batchSize < users.length) await sleep(delayMs);
   }
 
-  const durationSec = Math.round((Date.now() - start) / 1000);
-  return { success, fail, durationSec };
+  return { success, fail, durationSec: Math.round((Date.now() - start) / 1000) };
 }
 
-// ==========================
-// Envoi manuel corrigé
-// ==========================
+// ======================
+// 🔹 Envoi manuel du coupon
+// ======================
 async function sendManualCoupon() {
   try {
-    const { rows } = await pool.query(`
-      SELECT * FROM daily_pronos 
-      WHERE date_only = CURRENT_DATE AND type = 'gratuit' 
-      LIMIT 1
+    const { rows: coupons } = await pool.query(`
+      SELECT * FROM daily_pronos WHERE date_only = CURRENT_DATE AND type = 'gratuit' LIMIT 1
     `);
-    if (rows.length === 0) return console.log("⚠️ Aucun coupon manuel trouvé");
+    if (!coupons.length) return console.log("⚠️ Aucun coupon trouvé pour aujourd’hui");
+    const coupon = coupons[0];
+    const { rows: users } = await pool.query(`SELECT telegram_id, first_name, username FROM verified_users`);
+    if (!users.length) return console.log("⚠️ Aucun utilisateur trouvé");
 
-    const coupon = rows[0];
+    console.log(`🚀 Envoi manuel du coupon à ${users.length} utilisateurs...`);
+    const message = coupon.content || formatMatchTips(JSON.parse(coupon.matches || "[]"));
+    const { success, fail } = await sendToUsers(users, message);
+    if (ADMIN_ID)
+      await bot.sendMessage(ADMIN_ID, `✅ Coupon manuel : ${success} OK / ${fail} échecs`, { parse_mode: "HTML" });
 
-    const { rows: users } = await pool.query("SELECT telegram_id, first_name, username FROM verified_users");
-    if (!users.length) return console.log("⚠️ Aucun utilisateur trouvé pour l’envoi");
-
-    let success = 0;
-    let fail = 0;
-
-    for (const u of users) {
-      const chatId = u.telegram_id;
-      const name = u.first_name || (u.username ? `@${u.username}` : "ami");
-
-      try {
-        // 1️⃣ Envoi du média
-        if (coupon.media_url && coupon.media_type) {
-          switch (coupon.media_type) {
-            case "photo":
-              await bot.sendPhoto(chatId, coupon.media_url);
-              break;
-            case "video":
-              await bot.sendVideo(chatId, coupon.media_url);
-              break;
-            case "video_note":
-              await bot.sendVideoNote(chatId, coupon.media_url);
-              break;
-            case "voice":
-              await bot.sendVoice(chatId, coupon.media_url);
-              break;
-            case "audio":
-              await bot.sendAudio(chatId, coupon.media_url);
-              break;
-            case "document":
-              await bot.sendDocument(chatId, coupon.media_url);
-              break;
-            default:
-              await bot.sendMessage(chatId, `Salut ${name} 👋\n\nMédia non pris en charge`);
-          }
-        }
-
-        // 2️⃣ Envoi du texte séparé
-        const matches = coupon.matches ? JSON.parse(coupon.matches) : [];
-        const text = coupon.content || formatMatchTips(matches);
-
-        if (text && text.trim() !== "") {
-          await bot.sendMessage(chatId, `Salut ${name} 👋\n\n🎯 COUPON DU JOUR 🎯\n\n${escapeHtml(text)}`, { parse_mode: "HTML" });
-        }
-
-        success++;
-
-        // 3️⃣ Enregistrement dans daily_access
-        try {
-          await pool.query(`
-            INSERT INTO daily_access (telegram_id, date, clicked)
-            VALUES ($1, CURRENT_DATE, true)
-            ON CONFLICT (telegram_id, date) DO UPDATE SET clicked = true
-          `, [chatId]);
-        } catch (e) {
-          console.error("Erreur insert daily_access :", e.message || e);
-        }
-
-      } catch (err) {
-        console.error(`⚠️ Erreur envoi à ${chatId}:`, err?.message || err);
-        fail++;
-
-        try {
-          await pool.query(
-            `INSERT INTO failed_sends (telegram_id, message_type, reason) VALUES ($1, $2, $3)`,
-            [chatId, coupon.media_type || "text", err?.message || "unknown"]
-          );
-        } catch (dbErr) {
-          console.error("Erreur enregistrement échec :", dbErr.message || dbErr);
-        }
-      }
-    }
-
-    // Notification canal
-    try {
-      await bot.sendMessage(CHANNEL_ID, `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot : ${BOT_LINK}`, { parse_mode: "HTML" });
-    } catch (e) { console.error("Erreur notification canal :", e.message || e); }
-
-    // Rapport admin
-    if (ADMIN_ID) {
-      await bot.sendMessage(ADMIN_ID,
-        `✅ <b>Coupon manuel envoyé</b>\n👥 Utilisateurs : <b>${users.length}</b>\n📨 Réussis : <b>${success}</b>\n⚠️ Échecs : <b>${fail}</b>`,
-        { parse_mode: "HTML" }
-      );
-    }
-
-    console.log(`✅ Coupon manuel envoyé : ${success} réussis, ${fail} échecs`);
-
-    // Relance automatique des échecs
     await retryFailedSends();
-
   } catch (err) {
-    console.error("❌ Erreur envoi manuel :", err);
-    if (ADMIN_ID) await bot.sendMessage(ADMIN_ID, `❌ Erreur envoi manuel : ${escapeHtml(err.message || String(err))}`, { parse_mode: "HTML" });
+    console.error("❌ Erreur envoi manuel :", err.message);
   }
 }
 
-
-// ==========================
-// Génération + envoi automatique
-// ==========================
+// ======================
+// 🔹 Génération auto du coupon
+// ======================
 async function generateAndSendCoupon() {
   try {
-    const { rows } = await pool.query(`SELECT * FROM daily_pronos WHERE date_only = CURRENT_DATE AND type = 'gratuit'`);
-    if (rows.length > 0) return console.log("⚠️ Coupon déjà généré aujourd’hui");
+    const { rows } = await pool.query(`SELECT id FROM daily_pronos WHERE date_only = CURRENT_DATE AND type='gratuit'`);
+    if (rows.length) return console.log("⚠️ Coupon déjà généré aujourd’hui");
 
-    const allMatches = [
+    const matches = [
       ...(await generateCouponEurope()),
       ...(await generateCouponAfrica()),
       ...(await generateCouponAmerica()),
       ...(await generateCouponAsia())
     ];
+    if (!matches.length) return console.log("⚠️ Aucun match généré");
 
-    if (allMatches.length === 0) return console.log("⚠️ Aucun match généré");
-
-    const insertRes = await pool.query(
-      `INSERT INTO daily_pronos (matches, type) VALUES ($1, 'gratuit') RETURNING id`,
-      [JSON.stringify(allMatches)]
+    const insert = await pool.query(
+      `INSERT INTO daily_pronos (matches,type) VALUES ($1,'gratuit') RETURNING id`,
+      [JSON.stringify(matches)]
     );
+    const text = `🎯 <b>COUPON DU JOUR</b> 🎯\n\n${escapeHtml(matches.join("\n\n"))}`;
+    const { rows: users } = await pool.query(`SELECT telegram_id FROM verified_users`);
+    const { success, fail, durationSec } = await sendToUsers(users, text);
 
-    const messageText = `🎯 <b>COUPON DU JOUR</b> 🎯\n\n${escapeHtml(allMatches.join("\n\n"))}`;
-    const { rows: users } = await pool.query("SELECT telegram_id FROM verified_users");
-    const report = await sendToUsers(users, messageText);
+    if (CHANNEL_ID)
+      await bot.sendMessage(CHANNEL_ID, `📢 Le pronostic du jour est disponible !\n👉 ${BOT_LINK}`, { parse_mode: "HTML" });
 
-    for (let user of users) {
-      try {
-        await pool.query(`
-          INSERT INTO daily_access (telegram_id, date, clicked)
-          VALUES ($1, CURRENT_DATE, true)
-          ON CONFLICT (telegram_id, date) DO UPDATE SET clicked = true
-        `, [user.telegram_id]);
-      } catch (e) { console.error("Erreur insert daily_access :", e.message || e); }
-    }
-
-    try {
-      await bot.sendMessage(CHANNEL_ID, `📢 Le pronostic du jour est disponible !\n\nConnecte-toi à ton bot : ${BOT_LINK}`, { parse_mode: "HTML" });
-    } catch (e) { console.error("Erreur notification canal :", e.message || e); }
-
-    if (ADMIN_ID) {
+    if (ADMIN_ID)
       await bot.sendMessage(ADMIN_ID,
-        `✅ <b>Coupon généré et envoyé</b>\n👥 Utilisateurs : <b>${users.length}</b>\n📨 Réussis : <b>${report.success}</b>\n⚠️ Échecs : <b>${report.fail}</b>\n⏱️ Durée : <b>${report.durationSec}s</b>`,
-        { parse_mode: "HTML" }
-      );
-    }
+        `✅ Coupon généré et envoyé\n👥 ${users.length} users\n📨 ${success} OK / ${fail} échecs\n⏱ ${durationSec}s`,
+        { parse_mode: "HTML" });
 
-    console.log("✅ Coupon généré et envoyé (id:", insertRes.rows[0].id, ")");
-    await retryFailedSends(); // relance automatique
+    await retryFailedSends();
   } catch (err) {
-    console.error("❌ Erreur génération coupon :", err);
-    if (ADMIN_ID) await bot.sendMessage(ADMIN_ID, `❌ Erreur génération coupon : ${escapeHtml(err.message || String(err))}`, { parse_mode: "HTML" });
+    console.error("❌ Erreur génération coupon :", err.message);
   }
 }
 
-// ==========================
-// Nettoyage automatique
-// ==========================
+// ======================
+// 🔹 Nettoyage automatique
+// ======================
 async function cleanOldData() {
   try {
-    const { rowCount: pronosDeleted } = await pool.query(`
-      DELETE FROM daily_pronos
-      WHERE created_at < NOW() - INTERVAL '3 days'
-      AND date_only < CURRENT_DATE
-    `);
-
-    const { rowCount: accessDeleted } = await pool.query(`
-      DELETE FROM daily_access
-      WHERE date < CURRENT_DATE - INTERVAL '3 days'
-    `);
-
-    const today = moment().tz("Africa/Lome").format("YYYY-MM-DD");
-    if (ADMIN_ID) await bot.sendMessage(ADMIN_ID,
-      `🧹 <b>Nettoyage automatique effectué</b>\n\n📅 Date : <b>${today}</b>\n🗑️ Pronostics supprimés : <b>${pronosDeleted}</b>\n👤 Accès supprimés : <b>${accessDeleted}</b>`,
-      { parse_mode: "HTML" }
-    );
-
-    console.log("✅ Nettoyage terminé :", pronosDeleted, "pronos et", accessDeleted, "accès supprimés");
+    const { rowCount: pDel } = await pool.query(`DELETE FROM daily_pronos WHERE created_at < NOW() - INTERVAL '3 days'`);
+    const { rowCount: aDel } = await pool.query(`DELETE FROM daily_access WHERE date < CURRENT_DATE - INTERVAL '3 days'`);
+    console.log(`🧹 Nettoyage terminé (${pDel} pronos / ${aDel} accès)`);
   } catch (err) {
-    console.error("❌ Erreur nettoyage :", err.message || err);
-    if (ADMIN_ID) await bot.sendMessage(ADMIN_ID, `❌ Erreur lors du nettoyage : ${escapeHtml(err.message || String(err))}`, { parse_mode: "HTML" });
+    console.error("❌ Erreur nettoyage :", err.message);
   }
 }
 
-// ==========================
-// Rappel 16h
-// ==========================
-async function sendDailyReminder(batchSize = 30, delayMs = 2000) {
-  try {
-    const { rows: users } = await pool.query("SELECT telegram_id, first_name, username FROM verified_users");
-    if (!users.length) return console.log("⚠️ Aucun utilisateur pour le rappel 16h");
+// ======================
+// 🔹 Rappel 16h
+// ======================
+async function sendDailyReminder() {
+  const { rows: users } = await pool.query(`SELECT telegram_id, first_name, username FROM verified_users`);
+  if (!users.length) return console.log("⚠️ Aucun utilisateur pour le rappel");
 
-    console.log(`⏰ Envoi du rappel 16h à ${users.length} utilisateurs`);
-
-    for (let i = 0; i < users.length; i += batchSize) {
-      const batch = users.slice(i, i + batchSize);
-      await Promise.all(batch.map(async u => {
-        const chatId = u.telegram_id;
-        const name = u.first_name || (u.username ? `@${u.username}` : "ami");
-
-        try {
-          const sentMessage = await bot.sendMessage(chatId, `Salut ${name} 👋\n\n📢 N'oublie pas de consulter ton coupon du jour ! 🎯`, { parse_mode: "HTML" });
-
-          schedule.scheduleJob({ hour: 19, minute: 30 }, async () => {
-            try {
-              await bot.deleteMessage(chatId, sentMessage.message_id);
-              console.log(`✅ Message supprimé pour ${name}`);
-            } catch (err) {
-              console.error(`⚠️ Impossible de supprimer message pour ${name}:`, err.message || err);
-            }
-          });
-
-        } catch (err) {
-          console.error(`⚠️ Erreur envoi rappel à ${name}:`, err.message || err);
-          try {
-            await pool.query(
-              `INSERT INTO failed_sends (telegram_id, message_type, reason) VALUES ($1, $2, $3)`,
-              [chatId, "reminder", err?.message || "unknown"]
-            );
-          } catch (dbErr) {
-            console.error("Erreur enregistrement échec rappel :", dbErr.message || dbErr);
-          }
-        }
-      }));
-
-      if (i + batchSize < users.length) await new Promise(r => setTimeout(r, delayMs));
+  console.log(`⏰ Envoi du rappel à ${users.length} utilisateurs`);
+  for (const u of users) {
+    const name = u.first_name || (u.username ? `@${u.username}` : "ami");
+    try {
+      const msg = await bot.sendMessage(u.telegram_id, `Salut ${name} 👋\n\n🎯 N'oublie pas ton coupon du jour !`, { parse_mode: "HTML" });
+      // Suppression du message à 19h30
+      schedule.scheduleJob({ hour: 19, minute: 30 }, async () => {
+        try { await bot.deleteMessage(u.telegram_id, msg.message_id); } catch {}
+      });
+    } catch (err) {
+      console.error(`⚠️ Erreur rappel ${name}:`, err.message);
     }
-
-    console.log("✅ Rappel 16h envoyé et planifié pour suppression 19h30");
-  } catch (err) {
-    console.error("❌ Erreur globale envoi rappel :", err.message || err);
-    if (ADMIN_ID) await bot.sendMessage(ADMIN_ID, `❌ Erreur rappel 16h : ${escapeHtml(err.message || String(err))}`, { parse_mode: "HTML" });
   }
+  console.log("✅ Rappel 16h envoyé.");
 }
 
-function scheduleDailyReminder() {
-  schedule.scheduleJob("0 16 * * *", sendDailyReminder);
-}
+// ======================
+// 🔹 PLANNING AUTOMATIQUE
+// ======================
 
-// 🔹 Redémarrage quotidien
-// =====================
-schedule.scheduleJob("0 2 * * *", async () => {
-  console.log("♻️ Redémarrage automatique autoSend...");
-  if (ADMIN_ID) await bot.sendMessage(ADMIN_ID, "♻️ Redémarrage automatique autoSend...");
-  process.exit(0); // 🔹 relance le bot pour éviter les freezes
+// 05:00 Lomé → Génération et envoi automatique
+schedule.scheduleJob("0 5 * * *", generateAndSendCoupon);
+
+// 16:00 Lomé → Rappel du coupon
+schedule.scheduleJob("0 16 * * *", sendDailyReminder);
+
+// 01:00 Lomé → Nettoyage
+schedule.scheduleJob("0 1 * * *", cleanOldData);
+
+// Ping interne toutes les 10 min
+schedule.scheduleJob("*/10 * * * *", pingServer);
+
+// 02:00 UTC → Redémarrage du bot
+schedule.scheduleJob("0 2 * * *", () => {
+  console.log("♻️ Redémarrage automatique du bot (prévention freeze)");
+  if (ADMIN_ID) bot.sendMessage(ADMIN_ID, "♻️ Redémarrage automatique du bot...");
+  process.exit(0);
 });
 
+console.log("✅ AutoSender.js démarré avec succès");
 
 module.exports = {
   sendManualCoupon,
   generateAndSendCoupon,
   cleanOldData,
   retryFailedSends,
-  scheduleDailyReminder
+  sendDailyReminder,
+  pingServer
 };
