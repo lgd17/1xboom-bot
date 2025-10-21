@@ -196,15 +196,16 @@ async function sendDailyReminder() {
   }
   console.log("✅ Rappel 16h envoyé.");
 }
-};
 
 // 16:00 Lomé → Rappel du coupon
 schedule.scheduleJob("0 16 * * *", sendDailyReminder);
 
+console.log("✅ AutoSender.js démarré avec succès");
+
+module.exports = {
   sendManualCoupon,
   generateAndSendCoupon,
   cleanOldData,
   retryFailedSends,
-  sendDailyReminder,
-  pingServer
+  sendDailyReminder
 };
