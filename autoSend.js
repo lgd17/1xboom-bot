@@ -196,6 +196,7 @@ async function sendDailyReminder() {
   }
   console.log("✅ Rappel 16h envoyé.");
 }
+};
 
 // 16:00 Lomé → Rappel du coupon
 schedule.scheduleJob("0 16 * * *", sendDailyReminder);
