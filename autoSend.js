@@ -197,32 +197,9 @@ async function sendDailyReminder() {
   console.log("✅ Rappel 16h envoyé.");
 }
 
-// ======================
-// 🔹 PLANNING AUTOMATIQUE
-// ======================
-
-// 05:00 Lomé → Génération et envoi automatique
-schedule.scheduleJob("0 5 * * *", generateAndSendCoupon);
-
 // 16:00 Lomé → Rappel du coupon
 schedule.scheduleJob("0 16 * * *", sendDailyReminder);
 
-// 01:00 Lomé → Nettoyage
-schedule.scheduleJob("0 1 * * *", cleanOldData);
-
-// Ping interne toutes les 10 min
-schedule.scheduleJob("*/10 * * * *", pingServer);
-
-// 02:00 UTC → Redémarrage du bot
-schedule.scheduleJob("0 2 * * *", () => {
-  console.log("♻️ Redémarrage automatique du bot (prévention freeze)");
-  if (ADMIN_ID) bot.sendMessage(ADMIN_ID, "♻️ Redémarrage automatique du bot...");
-  process.exit(0);
-});
-
-console.log("✅ AutoSender.js démarré avec succès");
-
-module.exports = {
   sendManualCoupon,
   generateAndSendCoupon,
   cleanOldData,
