@@ -1,48 +1,43 @@
 // pingCron.js
+
 const { ping, pingBot2 } = require("./pingServer");
 const schedule = require("node-schedule");
 
-// ---------- 🕒 1️⃣ Fonction de vérification de la plage horaire ----------
+// Fonction pour vérifier si on est dans la plage 5h00 - 23h30
 function isWithinPingHours() {
   const now = new Date();
   const hours = now.getHours();
   const minutes = now.getMinutes();
-  // Plage 05:00 → 23:30 UTC
-  return (hours > 5 && hours < 23) || (hours === 5 && minutes >= 0) || (hours === 23 && minutes <= 30);
+  // Plage 05:00 → 23:30
+  return (hours > 5 || (hours === 5 && minutes >= 0)) && (hours < 23 || (hours === 23 && minutes <= 30));
 }
 
-// ---------- 🔁 2️⃣ Ping principal toutes les 14 minutes ----------
-schedule.scheduleJob("*/13 * * * *", async () => {
+// Job cron toutes les 14 minutes
+schedule.scheduleJob('*/14 * * * *', async () => {
   if (!isWithinPingHours()) return;
+
   try {
     await ping();
     const now = new Date();
-    console.log(`⏰ Ping principal exécuté à ${now.toISOString()} UTC`);
+    console.log(`⏰ Ping exécuté à ${now.getHours()}:${now.getMinutes()}`);
   } catch (err) {
-    console.error("❌ Erreur ping principal :", err.message);
+    console.error("❌ Erreur ping cron :", err.message);
   }
 });
 
-// ---------- 🚀 3️⃣ Réveil du Bot2 chaque jour à 05h05 UTC ----------
+// 🔵 Job cron à 05h05 chaque jour pour réveiller Bot2
 schedule.scheduleJob("5 5 * * *", async () => {
-  console.log("🚀 Tentative de réveil de Bot2 à 05h05 UTC...");
+  console.log("🚀 Tentative de réveil de Bot2 à 05h05...");
+
   try {
     await pingBot2();
-    console.log("✅ Bot2 réveillé avec succès !");
+    console.log("✅ Requête envoyée à Bot2 !");
   } catch (err) {
-    console.error("❌ Échec du réveil de Bot2 :", err.message);
+    console.error("❌ Erreur lors du réveil de Bot2 :", err.message);
   }
 });
 
-// ---------- 🧠 4️⃣ Ping immédiat si le bot démarre dans la plage horaire ----------
+// Ping immédiat au démarrage si dans la plage
 if (isWithinPingHours()) {
-  ping()
-    .then(() => console.log("⚡ Ping immédiat exécuté au démarrage"))
-    .catch((err) => console.error("❌ Erreur ping immédiat :", err.message));
+  ping().catch(err => console.error("❌ Erreur ping immédiat :", err.message));
 }
-
-// ---------- ♻️ 5️⃣ Redémarrage automatique quotidien ----------
-schedule.scheduleJob("0 2 * * *", () => {
-  console.log("♻️ Redémarrage automatique programmé à 02h00 UTC...");
-  process.exit(0);
-});
